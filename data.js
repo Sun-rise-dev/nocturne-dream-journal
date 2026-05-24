@@ -39,13 +39,6 @@ function updateDream(id, updates) {
   return dreams[idx];
 }
 
-function deleteDream(id) {
-  const dreams = loadDreams().filter(d => d.id !== id);
-  saveDreams(dreams);
-  showToast(t('toast_deleted'));
-  routeTo('timeline');
-}
-
 function getDreamStats() {
   const dreams = loadDreams();
   const stats = { total: dreams.length, emotions: {}, keywords: {}, byDate: {} };
@@ -58,36 +51,52 @@ function getDreamStats() {
   return stats;
 }
 
-function shareDream(id) {
+async function shareDream(id) {
   const dream = findDream(id);
   if (!dream) return;
 
-  // 保存到广播池
+  const narrative = dream.narrative?.slice(0, 300) || dream.rawText?.slice(0, 300) || '';
+  const emotion = dream.emotion || 'wonder';
+
+  // Try API first
+  const result = await apiShareBroadcast(narrative, emotion);
+  if (result.success) {
+    showToast(t('toast_shared'));
+    return;
+  }
+
+  // Fallback to localStorage
   try {
     let broadcast = JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
-    const shared = {
+    broadcast.unshift({
       id: 'b_' + Date.now(),
-      dreamId: dream.id,
+      narrative, emotion,
       date: new Date().toISOString(),
-      narrative: dream.narrative?.slice(0, 120) || '',
-      emotion: dream.emotion,
-      keywords: dream.keywords,
-      image: dream.image,
-      reactions: {}
-    };
-    broadcast.unshift(shared);
+      reactions: {},
+    });
     localStorage.setItem('nocturne-broadcast', JSON.stringify(broadcast));
-    showToast('已匿名分享到广播频道');
+    showToast(t('toast_shared'));
   } catch (e) { showToast('分享失败'); }
 }
 
-function loadBroadcast() {
+async function loadBroadcast() {
+  // Try API first
+  const result = await apiGetBroadcasts();
+  if (result.success && result.broadcasts.length > 0) {
+    return result.broadcasts;
+  }
+  // Fallback to localStorage
   try {
     return JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
   } catch { return []; }
 }
 
-function reactToDream(broadcastId, emoji) {
+async function reactToDream(broadcastId, emoji) {
+  // Try API first
+  const result = await apiReactBroadcast(broadcastId, emoji);
+  if (result.success) return;
+
+  // Fallback to localStorage
   try {
     let broadcast = JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
     const item = broadcast.find(b => b.id === broadcastId);

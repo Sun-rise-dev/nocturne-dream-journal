@@ -27,3 +27,38 @@ async function apiGetDreams() {
     return { success: false, dreams: [] };
   }
 }
+
+async function apiShareBroadcast(narrative, emotion) {
+  try {
+    const res = await fetch(`${API_BASE}/broadcast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ narrative, emotion }),
+    });
+    return await res.json();
+  } catch {
+    return { success: false };
+  }
+}
+
+async function apiGetBroadcasts() {
+  try {
+    const res = await fetch(`${API_BASE}/broadcast`);
+    return await res.json();
+  } catch {
+    return { success: false, broadcasts: [] };
+  }
+}
+
+async function apiReactBroadcast(broadcastId, emoji) {
+  try {
+    const res = await fetch(`${API_BASE}/broadcast/${broadcastId}/react`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji }),
+    });
+    return await res.json();
+  } catch {
+    return { success: false };
+  }
+}

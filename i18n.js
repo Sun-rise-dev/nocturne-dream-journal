@@ -107,7 +107,8 @@ const I18N = {
   }
 };
 
-let currentLang = localStorage.getItem('nocturne-lang') || 'zh';
+let currentLang;
+try { currentLang = localStorage.getItem('nocturne-lang') || 'zh'; } catch { currentLang = 'zh'; }
 
 function t(key, ...args) {
   let str = I18N[currentLang]?.[key] || I18N.zh[key] || key;
@@ -117,7 +118,8 @@ function t(key, ...args) {
 
 function toggleLang() {
   currentLang = currentLang === 'zh' ? 'en' : 'zh';
-  localStorage.setItem('nocturne-lang', currentLang);
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+  try { localStorage.setItem('nocturne-lang', currentLang); } catch {}
   const tagEl = document.getElementById('splashTagline');
   if (tagEl) tagEl.textContent = t('tagline');
   routeTo(APP.currentRoute === 'detail' || APP.currentRoute === 'stats' ? 'timeline' : APP.currentRoute);

@@ -5,30 +5,30 @@
    ============================================ */
 
 :root {
-  --abyss: #04080F;
-  --depth: #060C18;
-  --surface: #0A1024;
-  --mist: #0E142D;
+  --abyss: #060D18;
+  --depth: #091427;
+  --surface: #0E1A33;
+  --mist: #122044;
 
-  --gold-dim: rgba(212, 196, 168, 0.06);
-  --gold-soft: rgba(212, 196, 168, 0.12);
-  --gold-mid: rgba(212, 196, 168, 0.25);
-  --gold-bright: rgba(212, 196, 168, 0.55);
-  --gold-full: #D4C4A8;
+  --gold-dim: rgba(220, 205, 175, 0.08);
+  --gold-soft: rgba(220, 205, 175, 0.15);
+  --gold-mid: rgba(220, 205, 175, 0.55);
+  --gold-bright: rgba(220, 205, 175, 0.75);
+  --gold-full: #DCCDAF;
 
-  --moon-blue: rgba(150, 170, 195, 0.08);
+  --moon-blue: rgba(165, 185, 210, 0.10);
 
-  --light-pool: rgba(212, 196, 168, 0.03);
-  --light-pool-hover: rgba(212, 196, 168, 0.06);
+  --light-pool: rgba(220, 205, 175, 0.04);
+  --light-pool-hover: rgba(220, 205, 175, 0.08);
 
-  --card-bg: rgba(10, 16, 36, 0.45);
-  --card-border: rgba(212, 196, 168, 0.06);
-  --card-border-hover: rgba(212, 196, 168, 0.10);
+  --card-bg: rgba(14, 26, 51, 0.50);
+  --card-border: rgba(220, 205, 175, 0.09);
+  --card-border-hover: rgba(220, 205, 175, 0.14);
 
-  --text-body: rgba(220, 215, 205, 0.88);
-  --text-soft: rgba(200, 190, 175, 0.55);
-  --text-dim: rgba(180, 170, 155, 0.30);
-  --text-faint: rgba(160, 150, 135, 0.18);
+  --text-body: rgba(225, 220, 210, 0.90);
+  --text-soft: rgba(210, 200, 185, 0.65);
+  --text-dim: rgba(205, 195, 180, 0.60);
+  --text-faint: rgba(195, 185, 170, 0.45);
 
   --font-display: 'Cormorant Garamond', 'Georgia', 'Times New Roman', serif;
   --font-body: 'Georgia', 'Times New Roman', 'Noto Serif SC', serif;
@@ -43,6 +43,14 @@
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+.skip-link {
+  position: fixed; top: -100%; left: 12px; z-index: 999;
+  padding: 10px 18px; border-radius: 8px;
+  background: var(--gold-full); color: #000;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.skip-link:focus { top: 12px; }
 
 html, body {
   height: 100%; overflow: hidden;
@@ -85,11 +93,17 @@ html, body {
   pointer-events: none;
 }
 
+/* Floating particles canvas */
+#particles {
+  position: fixed; inset: 0; z-index: 2;
+  pointer-events: none;
+}
+
 /* Grain texture overlay */
 #app::after {
   content: '';
-  position: fixed; inset: 0; z-index: 2;
-  opacity: 0.025;
+  position: fixed; inset: 0; z-index: 3;
+  opacity: 0.02;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   pointer-events: none;
 }
@@ -745,9 +759,10 @@ html, body {
    ============================================ */
 
 :focus-visible {
-  outline: 1.5px solid var(--gold-mid);
+  outline: 2px solid var(--gold-bright);
   outline-offset: 2px;
 }
+:focus:not(:focus-visible) { outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

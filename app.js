@@ -12,7 +12,9 @@ function routeTo(path) {
   const main = document.getElementById('mainView');
   if (!main) return;
 
-  // Update tab labels
+  const titles = { timeline: 'Nocturne', record: 'Nocturne · Record', broadcast: 'Nocturne · Broadcast', detail: 'Nocturne · Dream', stats: 'Nocturne · Insights' };
+  document.title = titles[path] || 'Nocturne';
+
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.route === path));
   updateTabLabels();
 
@@ -189,7 +191,7 @@ function processDream() {
   const text = window._recorder?.transcript || '';
   if (!text.trim()) { showToast(t('toast_nothing')); return; }
   const pEl = document.getElementById('recordProcessing'); if (pEl) pEl.style.display = 'block';
-  const pText = pEl?.querySelector('.weaver-text');
+  const pText = pEl?.querySelector('.processing-text');
   const aEl = document.getElementById('recordActions'); if (aEl) aEl.style.display = 'none';
   const sEl = document.getElementById('recordStatus'); if (sEl) sEl.textContent = '';
 
@@ -244,24 +246,24 @@ function renderTimelinePage() {
     <button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button>
   </div>
   <div class="stat-row" onclick="viewStats()" style="cursor:pointer">
-    <div class="stat-cell"><span class="stat-cell-value">${stats.total}</span><span class="stat-cell-label">${t('stat_dreams')}</span></div>
-    <div class="stat-cell"><span class="stat-cell-value">${Object.keys(stats.keywords).length}</span><span class="stat-cell-label">${t('stat_symbols')}</span></div>
-    <div class="stat-cell"><span class="stat-cell-value">${em(topE?.[0]).symbol}</span><span class="stat-cell-label">${t('stat_mood')}</span></div>
+    <div class="stat-cell"><span class="stat-value">${stats.total}</span><span class="stat-label">${t('stat_dreams')}</span></div>
+    <div class="stat-cell"><span class="stat-value">${Object.keys(stats.keywords).length}</span><span class="stat-label">${t('stat_symbols')}</span></div>
+    <div class="stat-cell"><span class="stat-value">${em(topE?.[0]).symbol}</span><span class="stat-label">${t('stat_mood')}</span></div>
   </div>`;
 
   const groups = {};
   dreams.forEach(d => { const k = formatDate(d.date); if (!groups[k]) groups[k] = []; groups[k].push(d); });
   for (const [label, group] of Object.entries(groups)) {
-    html += `<div class="section-header">${label.toUpperCase()}</div>`;
+    html += `<h3 class="section-header">${label.toUpperCase()}</h3>`;
     group.forEach(dream => {
-      html += `<div class="card dream-cell" onclick="viewDream('${dream.id}')">
+      html += `<button class="card dream-cell" onclick="viewDream('${dream.id}')" style="width:100%;text-align:left;font:inherit">
         <div class="dream-cell-thumb">${dream.image ? `<img src="${dream.image}" alt="" loading="lazy">` : `<div class="dream-cell-thumb-placeholder">${em(dream.emotion).symbol}</div>`}</div>
         <div class="dream-cell-body">
           <div class="dream-cell-title">${esc(dream.narrative?.slice(0, 50) || dream.rawText?.slice(0, 50) || '···')}</div>
           <div class="dream-cell-meta">${em(dream.emotion).label}${dream.keywords?.length ? ' · ' + dream.keywords.slice(0,2).map(k => esc(k)).join(', ') : ''}</div>
         </div>
         <span class="dream-cell-chevron"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
-      </div>`;
+      </button>`;
     });
     html += '</div>';
   }
@@ -270,7 +272,7 @@ function renderTimelinePage() {
 
 function renderRecordPage() {
   return `<div class="record-container">
-    <div class="record-status" id="recordStatus">${t('record_status_idle')}</div>
+    <div class="record-status" id="recordStatus" aria-live="polite">${t('record_status_idle')}</div>
     <div class="record-btn-wrap" id="recordBtnWrap">
       <div class="record-ripple" id="ripple1" style="display:none"></div>
       <div class="record-ripple" id="ripple2" style="display:none"></div>
@@ -293,24 +295,15 @@ function renderRecordPage() {
 }
 
 function renderBroadcastPage() {
-  const broadcast = loadBroadcast();
-  if (broadcast.length === 0) {
-    return `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div>
-    <div class="card-list"><div class="card broadcast-empty-cell"><p>${t('broadcast_empty')}</p></div></div>`;
-  }
-  let html = `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div><div class="card-list">`;
-  broadcast.forEach(item => {
-    html += `<div class="card broadcast-card">
-      <div class="broadcast-meta">${em(item.emotion).symbol} ${em(item.emotion).label}</div>
-      <p class="broadcast-text">${esc(item.narrative?.slice(0, 180) || '')}</p>
-      <div class="broadcast-reactions">${['○','⁕','^'].map(e => { const c = (item.reactions||{})[e]||0; return `<button class="reaction-btn${c>0?' active':''}" onclick="reactToBroadcast('${item.id}','${e}')">${e}${c>0?`<span class="reaction-count">${c}</span>`:''}</button>`; }).join('')}</div>
+  return `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div>
+    <div class="broadcast-feed" id="broadcastFeed">
+      <div class="dream-weaver" style="padding:40px 0;display:flex;align-items:center;justify-content:center;gap:16px">
+        <div class="weaver-dot"></div><div class="weaver-dot"></div><div class="weaver-dot"></div>
+      </div>
     </div>`;
-  });
-  html += '</div>';
-  return html;
 }
 
-function reactToBroadcast(id, emoji) { reactToDream(id, emoji); routeTo('broadcast'); }
+async function reactToBroadcast(id, emoji) { await reactToDream(id, emoji); routeTo('broadcast'); }
 
 // ═══════════════════════ Dream Detail ═══════════════════════
 
@@ -390,10 +383,10 @@ function viewStats() {
       </div>
       <div class="nav-bar"><div><div class="nav-title">${t('insights_title')}</div><div class="nav-subtitle">${t('insights_subtitle', stats.total)}</div></div></div>
       <div class="stat-section"><div class="section-header">${t('insights_emotions')}</div><div class="card-list">
-        ${topEmo.map(([e,c]) => `<div class="card emotion-bar-row"><span class="emoji">${em(e).symbol}</span><span class="label">${em(e).label}</span><div class="emotion-bar-track"><div class="emotion-bar-fill" style="width:${(c/maxE*100)}%"></div></div><span class="count">${c}</span></div>`).join('')}
+        ${topEmo.map(([e,c]) => `<div class="card emotion-bar-row"><span class="emotion-emoji">${em(e).symbol}</span><span class="emotion-label">${em(e).label}</span><div class="emotion-bar-track"><div class="emotion-bar-fill" style="width:${(c/maxE*100)}%"></div></div><span class="emotion-count">${c}</span></div>`).join('')}
       </div></div>
       <div class="stat-section"><div class="section-header">${t('insights_symbols')}</div><div class="keyword-cloud">
-        ${topKw.map(([k,c]) => `<span class="keyword-item" style="font-size:${Math.max(12,Math.min(20,12+c*2))}px;opacity:${0.4+(c/topKw[0][1])*0.6}">${esc(k)}</span>`).join('')}
+        ${(() => { const maxKw = topKw[0]?.[1] || 1; return topKw.map(([k,c]) => `<span class="keyword-item" style="font-size:${Math.max(12,Math.min(20,12+c*2))}px;opacity:${0.4+(c/maxKw)*0.6}">${esc(k)}</span>`).join(''); })()}
       </div></div>`;
     main.style.opacity = '1';
   }, 180);
@@ -411,17 +404,137 @@ document.addEventListener('touchend', (e) => {
   if (dx > 60 && dx > dy * 1.5 && touchSX < 40) routeTo('timeline');
 });
 
+// ═══════════════════════ Particle System — gentle dust motes in moonlight ═══════════════════════
+
+function initParticles() {
+  const canvas = document.getElementById('particles');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (prefersReduced.matches) return;
+  let motes = [];
+  let animId;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Dust motes — warm, drifting
+  for (let i = 0; i < 30; i++) {
+    motes.push({
+      type: 'dust',
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.0 + 0.3,
+      speed: Math.random() * 0.2 + 0.05,
+      opacity: Math.random() * 0.18 + 0.04,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: Math.random() * 0.003 + 0.001,
+    });
+  }
+  // Stars — irregular scatter, slow twinkle, gentle drift
+  for (let i = 0; i < 18; i++) {
+    motes.push({
+      type: Math.random() < 0.3 ? 'cross' : 'dot',
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 0.6 + 0.15,
+      opacity: Math.random() * 0.4 + 0.15,
+      twinklePhase: Math.random() * Math.PI * 2,
+      twinkleSpeed: Math.random() * 0.008 + 0.004,
+      driftX: (Math.random() - 0.5) * 0.25,
+      driftY: (Math.random() - 0.5) * 0.25,
+    });
+  }
+
+  function draw(time) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const m of motes) {
+      if (m.type === 'dust') {
+        m.y -= m.speed;
+        m.wobble += m.wobbleSpeed;
+        m.x += Math.sin(m.wobble) * 0.15;
+        if (m.y < -10) { m.y = canvas.height + 10; m.x = Math.random() * canvas.width; }
+        const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 3);
+        g.addColorStop(0, `rgba(220, 205, 175, ${m.opacity})`);
+        g.addColorStop(1, 'rgba(220, 205, 175, 0)');
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 3, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+      } else {
+        // Star — slow drift + gentle twinkle
+        m.x += m.driftX;
+        m.y += m.driftY;
+        if (m.x < -10) m.x = canvas.width + 10;
+        if (m.x > canvas.width + 10) m.x = -10;
+        if (m.y < -10) m.y = canvas.height + 10;
+        if (m.y > canvas.height + 10) m.y = -10;
+
+        const twinkle = 0.35 + 0.65 * Math.sin(time * m.twinkleSpeed + m.twinklePhase);
+        const alpha = m.opacity * Math.max(0.15, twinkle);
+
+        // Soft glow halo
+        const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 2);
+        g.addColorStop(0, `rgba(240, 220, 160, ${alpha})`);
+        g.addColorStop(1, 'rgba(240, 220, 160, 0)');
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 2, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill();
+
+        // Core dot
+        ctx.beginPath(); ctx.arc(m.x, m.y, m.r * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 240, 200, ${alpha})`; ctx.fill();
+
+        // Cross sparkle on brightest moments
+        if (m.type === 'cross' && twinkle > 0.82) {
+          ctx.strokeStyle = `rgba(255, 240, 200, ${alpha * 0.35})`;
+          ctx.lineWidth = 0.3;
+          const len = m.r * 4;
+          ctx.beginPath();
+          ctx.moveTo(m.x - len, m.y); ctx.lineTo(m.x + len, m.y);
+          ctx.moveTo(m.x, m.y - len); ctx.lineTo(m.x, m.y + len);
+          ctx.stroke();
+        }
+      }
+    }
+    animId = requestAnimationFrame(draw);
+  }
+  animId = requestAnimationFrame(draw);
+  prefersReduced.addEventListener('change', (e) => {
+    if (e.matches) cancelAnimationFrame(animId);
+    else animId = requestAnimationFrame(draw);
+  });
+}
+
 // ═══════════════════════ Init ═══════════════════════
 
 function initTimelinePage() {}
 function initRecordPage() { window._recorder = new DreamRecorder(); }
-function initBroadcastPage() {}
+async function initBroadcastPage() {
+  const feed = document.getElementById('broadcastFeed');
+  if (!feed) return;
+  const broadcasts = await loadBroadcast();
+  if (broadcasts.length === 0) {
+    feed.innerHTML = `<div class="broadcast-empty-cell"><p>${t('broadcast_empty')}</p></div>`;
+    return;
+  }
+  feed.innerHTML = broadcasts.map(item => {
+    return `<div class="card broadcast-card">
+      <div class="broadcast-meta">${em(item.emotion).symbol} ${em(item.emotion).label}</div>
+      <p class="broadcast-text">${esc(item.narrative?.slice(0, 180) || '')}</p>
+      <div class="broadcast-reactions">${['○','⁕','^'].map(e => {
+        const c = (item.reactions||{})[e]||0;
+        return `<button class="reaction-btn${c>0?' active':''}" onclick="reactToBroadcast('${item.id}','${e}')">${e}${c>0?`<span class="reaction-count">${c}</span>`:''}</button>`;
+      }).join('')}</div>
+    </div>`;
+  }).join('');
+}
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Splash tagline
   const tagEl = document.getElementById('splashTagline');
   if (tagEl) tagEl.textContent = t('tagline');
 
+  initParticles();
   updateTabLabels();
   initNavigation();
   const hash = window.location.hash.replace('#', '') || 'timeline';
