@@ -1,17 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="50%">
-      <stop offset="0%" stop-color="#0E142D"/>
-      <stop offset="100%" stop-color="#04080F"/>
-    </radialGradient>
-    <radialGradient id="glow" cx="45%" cy="40%">
-      <stop offset="0%" stop-color="rgba(212,196,168,0.15)"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A1228"/>
+      <stop offset="100%" stop-color="#040810"/>
+    </linearGradient>
+    <radialGradient id="moonGlow" cx="50%" cy="42%">
+      <stop offset="0%" stop-color="rgba(220,205,175,0.25)"/>
+      <stop offset="40%" stop-color="rgba(220,205,175,0.06)"/>
       <stop offset="100%" stop-color="transparent"/>
     </radialGradient>
+    <radialGradient id="moonBody" cx="45%" cy="40%">
+      <stop offset="0%" stop-color="#E8DFCF"/>
+      <stop offset="60%" stop-color="#D4C4A8"/>
+      <stop offset="100%" stop-color="#B8A080"/>
+    </radialGradient>
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
-  <circle cx="256" cy="210" r="120" fill="url(#glow)"/>
-  <circle cx="228" cy="190" r="32" fill="rgba(212,196,168,0.5)"/>
-  <circle cx="228" cy="190" r="80" fill="none" stroke="rgba(212,196,168,0.12)" stroke-width="2"/>
-  <circle cx="228" cy="190" r="112" fill="none" stroke="rgba(212,196,168,0.06)" stroke-width="1.5"/>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="106" fill="url(#sky)"/>
+
+  <!-- Subtle stars -->
+  <circle cx="120" cy="88" r="2.5" fill="rgba(220,205,175,0.5)"/>
+  <circle cx="380" cy="70" r="2" fill="rgba(220,205,175,0.35)"/>
+  <circle cx="420" cy="140" r="1.5" fill="rgba(200,215,235,0.4)"/>
+  <circle cx="78" cy="180" r="1.8" fill="rgba(220,205,175,0.3)"/>
+  <circle cx="130" cy="340" r="2" fill="rgba(220,205,175,0.25)"/>
+  <circle cx="400" cy="350" r="1.5" fill="rgba(200,215,235,0.3)"/>
+  <circle cx="340" cy="420" r="1.8" fill="rgba(220,205,175,0.2)"/>
+  <!-- Cross sparkle star -->
+  <g transform="translate(360, 100)" opacity="0.6">
+    <line x1="-6" y1="0" x2="6" y2="0" stroke="rgba(240,225,180,0.6)" stroke-width="0.6"/>
+    <line x1="0" y1="-6" x2="0" y2="6" stroke="rgba(240,225,180,0.6)" stroke-width="0.6"/>
+    <circle cx="0" cy="0" r="1.5" fill="rgba(240,225,180,0.8)"/>
+  </g>
+
+  <!-- Moon glow -->
+  <circle cx="256" cy="224" r="200" fill="url(#moonGlow)"/>
+
+  <!-- Subtle rings -->
+  <circle cx="256" cy="224" r="140" fill="none" stroke="rgba(220,205,175,0.06)" stroke-width="0.8"/>
+  <circle cx="256" cy="224" r="180" fill="none" stroke="rgba(220,205,175,0.03)" stroke-width="0.5"/>
+
+  <!-- Moon crescent body -->
+  <circle cx="256" cy="224" r="92" fill="url(#moonBody)" filter="url(#softGlow)"/>
+
+  <!-- Crescent cutout -->
+  <circle cx="300" cy="190" r="76" fill="#0A1228"/>
+
+  <!-- Inner reflection -->
+  <ellipse cx="220" cy="196" rx="22" ry="34" fill="rgba(255,255,255,0.08)" transform="rotate(-22,220,196)"/>
 </svg>
