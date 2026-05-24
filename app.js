@@ -918,6 +918,23 @@ async function initBroadcastPage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Register Service Worker
+  if ('serviceWorker' in navigator) {
+    const swPath = (location.pathname.replace(/\/[^/]*$/, '') || '') + '/sw.js';
+    navigator.serviceWorker.register(swPath).then(reg => {
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'activated' && navigator.serviceWorker.controller) {
+              showToast(currentLang === 'zh' ? '已更新到最新版本' : 'Updated to latest version', 2000);
+            }
+          });
+        }
+      });
+    }).catch(() => {});
+  }
+
   initParticles();
   updateTabLabels();
   initNavigation();
