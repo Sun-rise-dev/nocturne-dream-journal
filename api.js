@@ -7,7 +7,7 @@ const API_BASE = (() => {
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return 'http://localhost:12450/api';
   }
-  return 'https://sun-rise-dev.github.io/nocturne-dream-journal/api';
+  return '/api';
 })();
 
 function authHeaders() {
