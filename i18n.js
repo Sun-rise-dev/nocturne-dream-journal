@@ -40,6 +40,7 @@ const I18N = {
     insights_symbols: '重复出现的意象',
 
     toast_saved: '梦境已记录 ✦',
+    toast_saved_no_image: '梦境已记录，插图生成失败',
     toast_saved_offline: '梦境已记录（离线）',
     toast_deleted: '梦境已删除',
     toast_shared: '已匿名分享到广播',
@@ -93,6 +94,7 @@ const I18N = {
     insights_symbols: 'RECURRING SYMBOLS',
 
     toast_saved: 'Dream saved ✦',
+    toast_saved_no_image: 'Dream saved, image failed',
     toast_saved_offline: 'Saved (offline)',
     toast_deleted: 'Dream deleted',
     toast_shared: 'Shared anonymously',

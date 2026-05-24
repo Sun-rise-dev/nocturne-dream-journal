@@ -249,7 +249,7 @@ function processDream() {
       let image = r.image_url || await generateImage(r.narrative || text, r.keywords || _extractKeywords(text), r.emotion || 'wonder');
       if (image) image = await compressImage(image, 600, 0.65);
       addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null, audio: audioUrl });
-      showToast(t('toast_saved'));
+      showToast(image ? t('toast_saved') : t('toast_saved_no_image'));
     } else {
       if (pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
       const emotion = _detectEmotion(text);
@@ -257,7 +257,7 @@ function processDream() {
       let image = await generateImage(text, keywords, emotion);
       if (image) image = await compressImage(image, 600, 0.65);
       addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image, audio: audioUrl });
-      showToast(image ? t('toast_saved') : t('toast_saved_offline'));
+      showToast(image ? t('toast_saved') : t('toast_saved_no_image'));
     }
     setTimeout(() => routeTo('timeline'), 500);
     if (pEl) pEl.style.display = 'none';
