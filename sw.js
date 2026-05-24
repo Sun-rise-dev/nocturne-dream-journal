@@ -3,7 +3,7 @@
  * Caches core assets for offline use.
  */
 
-const CACHE = 'nocturne-v5';
+const CACHE = 'nocturne-v6';
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '');
 const ASSETS = [
   BASE + '/',
@@ -15,7 +15,9 @@ const ASSETS = [
   BASE + '/i18n.js',
   BASE + '/manifest.json',
   BASE + '/icon-192.svg',
+  BASE + '/icon-192.png',
   BASE + '/icon-512.svg',
+  BASE + '/icon-512.png',
 ];
 
 // Install: pre-cache all core assets (individual fetch for resilience)
