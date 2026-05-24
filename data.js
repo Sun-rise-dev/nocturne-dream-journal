@@ -1,37 +1,11 @@
 /**
- * Nocturne · 数据管理 — localStorage 持久化
+ * Nocturne · 数据管理 — IndexedDB 持久化（兼容 localStorage 旧数据自动迁移）
  */
 
-const STORAGE_KEY = 'nocturne-dreams';
+// ═══════════════════════ Stats (uses db.js async API) ═══════════════════════
 
-function loadDreams() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveDreams(dreams) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(dreams));
-  } catch (e) { console.error('保存失败', e); }
-}
-
-function findDream(id) {
-  return loadDreams().find(d => d.id === id);
-}
-
-function addDream(dream) {
-  const dreams = loadDreams();
-  dream.id = dream.id || 'dream_' + Date.now();
-  dream.date = dream.date || new Date().toISOString();
-  dreams.unshift(dream);
-  saveDreams(dreams);
-  return dream;
-}
-
-function getDreamStats() {
-  const dreams = loadDreams();
+async function getDreamStats() {
+  const dreams = await loadDreams();
   const stats = { total: dreams.length, emotions: {}, keywords: {}, byDate: {} };
   dreams.forEach(d => {
     stats.emotions[d.emotion] = (stats.emotions[d.emotion] || 0) + 1;
@@ -42,57 +16,55 @@ function getDreamStats() {
   return stats;
 }
 
+// ═══════════════════════ Share to Broadcast ═══════════════════════
+
 async function shareDream(id) {
-  const dream = findDream(id);
+  const dream = await findDream(id);
   if (!dream) return;
 
   const narrative = dream.narrative?.slice(0, 300) || dream.rawText?.slice(0, 300) || '';
   const emotion = dream.emotion || 'wonder';
 
-  // Try API first
   const result = await apiShareBroadcast(narrative, emotion);
   if (result.success) {
     showToast(t('toast_shared'));
     return;
   }
 
-  // Fallback to localStorage
+  // Fallback to local
   try {
-    let broadcast = JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
+    const saved = await idb('settings').get('broadcast');
+    let broadcast = saved?.value || [];
     broadcast.unshift({
       id: 'b_' + Date.now(),
       narrative, emotion,
       date: new Date().toISOString(),
       reactions: {},
     });
-    localStorage.setItem('nocturne-broadcast', JSON.stringify(broadcast));
+    await saveBroadcastLocally(broadcast);
     showToast(t('toast_shared'));
-  } catch (e) { showToast('分享失败'); }
+  } catch (e) { showToast('Share failed'); }
 }
 
-async function loadBroadcast() {
-  const result = await apiGetBroadcasts();
-  if (result.success) {
-    return { broadcasts: result.broadcasts, online: true };
-  }
-  // Fallback to localStorage
-  try {
-    return { broadcasts: JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]'), online: false };
-  } catch { return { broadcasts: [], online: false }; }
-}
+// ═══════════════════════ React to Broadcast ═══════════════════════
 
-async function reactToDream(broadcastId, emoji) {
-  // Try API first
+async function reactToDreamDB(broadcastId, emoji) {
   const result = await apiReactBroadcast(broadcastId, emoji);
   if (result.success) return;
 
-  // Fallback to localStorage
+  // Fallback to local
   try {
-    let broadcast = JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
+    const saved = await idb('settings').get('broadcast');
+    let broadcast = saved?.value || [];
     const item = broadcast.find(b => b.id === broadcastId);
     if (item) {
       item.reactions[emoji] = (item.reactions[emoji] || 0) + 1;
-      localStorage.setItem('nocturne-broadcast', JSON.stringify(broadcast));
+      await saveBroadcastLocally(broadcast);
     }
   } catch {}
+}
+
+// Compatibility alias — app.js calls reactToDream
+async function reactToDream(broadcastId, emoji) {
+  return reactToDreamDB(broadcastId, emoji);
 }

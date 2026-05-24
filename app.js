@@ -21,13 +21,13 @@ function routeTo(path) {
   main.style.opacity = '0';
   main.style.transition = 'opacity 0.2s ease';
 
-  setTimeout(() => {
+  setTimeout(async () => {
     switch (path) {
       case 'record': main.innerHTML = renderRecordPage(); initRecordPage(); break;
-      case 'broadcast': main.innerHTML = renderBroadcastPage(); break;
+      case 'broadcast': main.innerHTML = renderBroadcastPage(); initBroadcastPage(); break;
       case 'login': main.innerHTML = renderLoginPage(); break;
       case 'profile': main.innerHTML = renderProfilePage(); break;
-      default: main.innerHTML = renderTimelinePage(); break;
+      default: main.innerHTML = await renderTimelinePage(); initTimelineFilters(); break;
     }
     main.style.opacity = '1';
   }, 180);
@@ -114,6 +114,8 @@ class DreamRecorder {
     this.isRecording = false;
     this.recognition = null; this.timer = null;
     this.seconds = 0; this.lastSpeech = 0;
+    this.mediaRecorder = null; this.audioChunks = [];
+    this.audioBlob = null;
     this.init();
   }
   init() {
@@ -169,8 +171,18 @@ class DreamRecorder {
       const el = document.getElementById(id);
       if (el) { el.style.display = 'block'; el.style.animation = 'none'; el.offsetHeight; el.style.animation = ''; }
     });
-    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = ''; }
+    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = ''; el.contentEditable = 'false'; el.style.cursor = ''; }
     document.getElementById('recordActions').style.display = 'none';
+    // Audio capture
+    this.audioChunks = [];
+    this.audioBlob = null;
+    navigator.mediaDevices?.getUserMedia({ audio: true }).then(stream => {
+      this.mediaRecorder = new MediaRecorder(stream);
+      this.mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) this.audioChunks.push(e.data); };
+      this.mediaRecorder.onstop = () => { this.audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' }); stream.getTracks().forEach(t => t.stop()); };
+      this.mediaRecorder.start();
+    }).catch(() => {});
+
     this.timer = setInterval(() => {
       this.seconds++;
       const m = Math.floor(this.seconds / 60).toString().padStart(2, '0');
@@ -189,12 +201,17 @@ class DreamRecorder {
     });
     document.getElementById('recordStatus').textContent = this.transcript ? t('record_status_done') : t('record_status_idle');
     document.getElementById('recordTimer').textContent = '00:00';
-    if (this.transcript.trim()) document.getElementById('recordActions').style.display = 'flex';
+    if (this.transcript.trim()) {
+      document.getElementById('recordActions').style.display = 'flex';
+      const tEl = document.getElementById('recordTranscript');
+      if (tEl) { tEl.contentEditable = 'true'; tEl.style.cursor = 'text'; }
+    }
+    if (this.mediaRecorder && this.mediaRecorder.state === 'recording') this.mediaRecorder.stop();
   }
   reset() {
     this.transcript = ''; this.seconds = 0;
     document.getElementById('recordTimer').textContent = '00:00';
-    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = 'none'; el.contentEditable = 'false'; el.style.cursor = ''; }
     document.getElementById('recordActions').style.display = 'none';
     document.getElementById('recordStatus').textContent = t('record_status_idle');
   }
@@ -203,8 +220,11 @@ class DreamRecorder {
 // ═══════════════════════ Dream Processing ═══════════════════════
 
 function processDream() {
-  const text = window._recorder?.transcript || '';
-  if (!text.trim()) { showToast(t('toast_nothing')); return; }
+  const tEl = document.getElementById('recordTranscript');
+  const text = (tEl?.textContent || window._recorder?.transcript || '').trim();
+  if (!text) { showToast(t('toast_nothing')); return; }
+  const audioBlob = window._recorder?.audioBlob;
+  const audioUrl = audioBlob ? URL.createObjectURL(audioBlob) : null;
   const pEl = document.getElementById('recordProcessing'); if (pEl) pEl.style.display = 'block';
   const pText = pEl?.querySelector('.processing-text');
   const aEl = document.getElementById('recordActions'); if (aEl) aEl.style.display = 'none';
@@ -225,16 +245,17 @@ function processDream() {
     clearInterval(phaseInterval);
     if (r.success) {
       if (!r.image_url && pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
-      const image = r.image_url || await generateImage(r.narrative || text, r.keywords || _extractKeywords(text), r.emotion || 'wonder');
-      addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null });
+      let image = r.image_url || await generateImage(r.narrative || text, r.keywords || _extractKeywords(text), r.emotion || 'wonder');
+      if (image) image = await compressImage(image, 600, 0.65);
+      addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null, audio: audioUrl });
       showToast(t('toast_saved'));
     } else {
-      // Vercel blocked — local processing + direct image generation
       if (pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
       const emotion = _detectEmotion(text);
       const keywords = _extractKeywords(text);
-      const image = await generateImage(text, keywords, emotion);
-      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image });
+      let image = await generateImage(text, keywords, emotion);
+      if (image) image = await compressImage(image, 600, 0.65);
+      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image, audio: audioUrl });
       showToast(image ? t('toast_saved') : t('toast_saved_offline'));
     }
     setTimeout(() => routeTo('timeline'), 500);
@@ -243,10 +264,57 @@ function processDream() {
 }
 function resetRecording() { window._recorder?.reset(); }
 
+// ═══════════════════════ Timeline Search & Filter ═══════════════════════
+
+let _filterEmotion = null;
+let _filterText = '';
+
+function initTimelineFilters() {
+  const search = document.getElementById('timelineSearch');
+  if (!search) return;
+  search.addEventListener('input', () => {
+    _filterText = search.value.trim().toLowerCase();
+    applyFilters();
+  });
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const e = chip.dataset.emotion;
+      _filterEmotion = _filterEmotion === e ? null : e;
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.emotion === _filterEmotion));
+      applyFilters();
+    });
+  });
+}
+
+function applyFilters() {
+  document.querySelectorAll('.dream-cell').forEach(cell => {
+    const id = cell.dataset.dreamId;
+    const dream = _allDreamsCache?.find(d => d.id === id);
+    if (!dream) return;
+    let show = true;
+    if (_filterEmotion && dream.emotion !== _filterEmotion) show = false;
+    if (_filterText && show) {
+      const haystack = [dream.narrative, dream.rawText, ...(dream.keywords || [])].join(' ').toLowerCase();
+      if (!haystack.includes(_filterText)) show = false;
+    }
+    cell.style.display = show ? '' : 'none';
+  });
+  document.querySelectorAll('.section-header').forEach(h => {
+    let next = h.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('section-header')) {
+      if (next.style.display !== 'none') { hasVisible = true; break; }
+      next = next.nextElementSibling;
+    }
+    h.style.display = hasVisible ? '' : 'none';
+  });
+}
+
 // ═══════════════════════ Page Templates ═══════════════════════
 
-function renderTimelinePage() {
-  const dreams = loadDreams();
+async function renderTimelinePage() {
+  const dreams = await loadDreams();
+  _allDreamsCache = dreams;
   if (dreams.length === 0) {
     const btnText = t('empty_btn');
     return `<div class="timeline-empty">
@@ -256,7 +324,7 @@ function renderTimelinePage() {
       <button class="btn btn-primary" onclick="routeTo('record')">${btnText}</button>
     </div>`;
   }
-  const stats = getDreamStats();
+  const stats = await getDreamStats();
   const topE = Object.entries(stats.emotions).sort((a,b) => b[1]-a[1])[0];
 
   const user = getCurrentUser();
@@ -275,6 +343,10 @@ function renderTimelinePage() {
     <div class="stat-cell"><span class="stat-value">${stats.total}</span><span class="stat-label">${t('stat_dreams')}</span></div>
     <div class="stat-cell"><span class="stat-value">${Object.keys(stats.keywords).length}</span><span class="stat-label">${t('stat_symbols')}</span></div>
     <div class="stat-cell"><span class="stat-value">${em(topE?.[0]).symbol}</span><span class="stat-label">${t('stat_mood')}</span></div>
+  </div>
+  <div class="timeline-filters">
+    <input type="search" id="timelineSearch" class="search-input" placeholder="${currentLang==='zh'?'搜索梦境...':'Search dreams...'}">
+    <div class="filter-chips">${['wonder','joy','calm','fear','anxiety','sad','strange'].map(e => `<span class="filter-chip" data-emotion="${e}">${em(e).symbol} ${em(e).label}</span>`).join('')}</div>
   </div>`;
 
   const groups = {};
@@ -282,7 +354,7 @@ function renderTimelinePage() {
   for (const [label, group] of Object.entries(groups)) {
     html += `<h3 class="section-header">${label.toUpperCase()}</h3>`;
     group.forEach(dream => {
-      html += `<button class="card dream-cell" onclick="viewDream('${dream.id}')" style="width:100%;text-align:left;font:inherit" aria-label="${esc(dream.narrative?.slice(0, 40) || dream.rawText?.slice(0, 40) || '')}">
+      html += `<button class="card dream-cell" data-dream-id="${dream.id}" onclick="viewDream('${dream.id}')" style="width:100%;text-align:left;font:inherit" aria-label="${esc(dream.narrative?.slice(0, 40) || dream.rawText?.slice(0, 40) || '')}">
         <div class="dream-cell-thumb">${dream.image ? `<img src="${dream.image}" alt="" loading="lazy">` : `<div class="dream-cell-thumb-placeholder">${em(dream.emotion).symbol}</div>`}</div>
         <div class="dream-cell-body">
           <div class="dream-cell-title">${esc(dream.narrative?.slice(0, 50) || dream.rawText?.slice(0, 50) || '···')}</div>
@@ -337,8 +409,8 @@ async function reactToBroadcast(id, emoji) { await reactToDream(id, emoji); rout
 
 // ═══════════════════════ Dream Detail ═══════════════════════
 
-function viewDream(id) {
-  const dream = findDream(id);
+async function viewDream(id) {
+  const dream = await findDream(id);
   if (!dream) { showToast(t('toast_not_found')); return; }
   document.title = 'Nocturne · Dream';
   const e = em(dream.emotion);
@@ -354,6 +426,7 @@ function viewDream(id) {
       </div>
       <div class="detail-image">${dream.image ? `<img src="${dream.image}" alt="">` : `<div class="detail-image-placeholder">${e.symbol}</div>`}</div>
       <div class="detail-meta">${formatDate(dream.date)} · ${e.symbol} ${e.label}</div>
+      ${dream.audio ? `<audio controls src="${dream.audio}" class="detail-audio"></audio>` : ''}
       <h1 class="detail-title">${esc(dream.title || dream.narrative?.slice(0, 36) || (currentLang==='zh'?'未命名之梦':'Untitled'))}</h1>
       <div class="detail-narrative">${esc(dream.narrative || dream.rawText || '')}</div>
       <div class="detail-keywords">${dream.keywords?.map(k => `<span class="detail-keyword">${esc(k)}</span>`).join('') || ''}</div>
@@ -366,14 +439,14 @@ function viewDream(id) {
   APP.currentRoute = 'detail';
 }
 
-function deleteDream(id) {
-  const dream = findDream(id);
+async function deleteDream(id) {
+  const dream = await findDream(id);
   if (!dream) return;
   const backup = { ...dream };
 
   // Optimistic delete with undo
-  const dreams = loadDreams().filter(d => d.id !== id);
-  saveDreams(dreams);
+  const dreams = (await loadDreams()).filter(d => d.id !== id);
+  await saveDreams(dreams);
   routeTo('timeline');
 
   const undoMsg = currentLang === 'zh' ? '已删除 · 点击撤销' : 'Deleted · Tap to undo';
@@ -381,10 +454,10 @@ function deleteDream(id) {
 
   // Undo listener
   const toast = document.getElementById('toast');
-  const undo = () => {
-    const current = loadDreams();
+  const undo = async () => {
+    const current = await loadDreams();
     current.push(backup);
-    saveDreams(current);
+    await saveDreams(current);
     showToast(currentLang === 'zh' ? '已恢复' : 'Restored');
     routeTo('timeline');
     toast.removeEventListener('click', undo);
@@ -398,8 +471,8 @@ function deleteDream(id) {
 
 // ═══════════════════════ Stats ═══════════════════════
 
-function viewStats() {
-  const stats = getDreamStats();
+async function viewStats() {
+  const stats = await getDreamStats();
   if (stats.total === 0) return;
   document.title = 'Nocturne · Insights';
   const topEmo = Object.entries(stats.emotions).sort((a,b) => b[1]-a[1]).slice(0, 6);
@@ -773,6 +846,14 @@ function renderProfilePage() {
         <button class="btn btn-ghost" onclick="handleLogout()">${currentLang==='zh'?'退出登录':'Log Out'}</button>
       </div>
     </div>
+    <div class="card profile-edit" style="margin-top:12px">
+      <label class="profile-label">${currentLang==='zh'?'数据管理':'Data'}</label>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-secondary" onclick="handleExport()" style="flex:1;justify-content:center">${currentLang==='zh'?'导出数据':'Export'}</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('importFile').click()" style="flex:1;justify-content:center">${currentLang==='zh'?'导入数据':'Import'}</button>
+      </div>
+      <input type="file" id="importFile" accept=".json" style="display:none" onchange="handleImport(event)">
+    </div>
   </div>`;
 }
 
@@ -785,6 +866,34 @@ async function saveProfile() {
 }
 
 async function handleLogout() { await apiLogout(); showToast(currentLang==='zh'?'已退出':'Logged out'); routeTo('timeline'); }
+
+async function handleExport() {
+  try {
+    const json = await exportDreamsJSON();
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'nocturne-dreams-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(currentLang === 'zh' ? '导出成功' : 'Exported');
+  } catch { showToast(currentLang === 'zh' ? '导出失败' : 'Export failed'); }
+}
+
+async function handleImport(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const count = await importDreamsJSON(text);
+    showToast((currentLang === 'zh' ? '已导入 ' + count + ' 条梦境' : 'Imported ' + count + ' dreams'));
+    routeTo('timeline');
+  } catch (e) {
+    showToast(currentLang === 'zh' ? '导入失败：' + e.message : 'Import failed: ' + e.message);
+  }
+  event.target.value = '';
+}
 
 function initRecordPage() { window._recorder = new DreamRecorder(); }
 async function initBroadcastPage() {
@@ -815,6 +924,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const hash = window.location.hash.replace('#', '') || 'timeline';
   routeTo(hash);
 
-  // Light-gathering splash
   initSplash();
+
+  // PWA install prompt
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show custom install prompt after 30s
+    setTimeout(() => {
+      if (deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
+        const installBar = document.createElement('div');
+        installBar.className = 'install-bar';
+        installBar.innerHTML = `
+          <span>${currentLang === 'zh' ? '添加到主屏幕，随时随地记录梦境' : 'Add to Home Screen for quick access'}</span>
+          <button class="btn btn-primary" style="padding:7px 14px;font-size:11px;min-height:auto">${currentLang === 'zh' ? '安装' : 'Install'}</button>
+          <button class="install-dismiss" aria-label="Dismiss">&times;</button>
+        `;
+        installBar.querySelector('.btn').onclick = () => { deferredPrompt.prompt(); deferredPrompt = null; installBar.remove(); };
+        installBar.querySelector('.install-dismiss').onclick = () => installBar.remove();
+        document.body.appendChild(installBar);
+      }
+    }, 30000);
+  });
 });

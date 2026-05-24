@@ -3,7 +3,7 @@
  * Caches core assets for offline use.
  */
 
-const CACHE = 'nocturne-v6';
+const CACHE = 'nocturne-v7';
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '');
 const ASSETS = [
   BASE + '/',
@@ -11,6 +11,7 @@ const ASSETS = [
   BASE + '/styles.css',
   BASE + '/app.js',
   BASE + '/data.js',
+  BASE + '/db.js',
   BASE + '/api.js',
   BASE + '/i18n.js',
   BASE + '/manifest.json',
