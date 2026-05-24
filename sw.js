@@ -4,17 +4,18 @@
  */
 
 const CACHE = 'nocturne-v1';
+const BASE = self.location.pathname.replace(/\/[^/]*$/, '');
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/app.js',
-  '/data.js',
-  '/api.js',
-  '/i18n.js',
-  '/manifest.json',
-  '/icon-192.svg',
-  '/icon-512.svg',
+  BASE + '/',
+  BASE + '/index.html',
+  BASE + '/styles.css',
+  BASE + '/app.js',
+  BASE + '/data.js',
+  BASE + '/api.js',
+  BASE + '/i18n.js',
+  BASE + '/manifest.json',
+  BASE + '/icon-192.svg',
+  BASE + '/icon-512.svg',
 ];
 
 // Install: pre-cache all core assets
