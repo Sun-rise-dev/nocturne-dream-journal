@@ -221,22 +221,25 @@ function processDream() {
     if (phaseIdx < phases.length && pText) pText.textContent = phases[phaseIdx];
   }, 1200);
 
-  apiProcessDream(text).then(r => {
+  apiProcessDream(text).then(async r => {
     clearInterval(phaseInterval);
     if (r.success) {
-      addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image: r.image_url || null, title: r.title || null });
+      if (!r.image_url && pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
+      const image = r.image_url || await generateImage(r.narrative || text, r.keywords || _extractKeywords(text), r.emotion || 'wonder');
+      addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null });
       showToast(t('toast_saved'));
     } else {
-      addDream({ rawText: text, narrative: text, emotion: 'wonder', keywords: kw(text), title: text.slice(0, 28), image: null });
-      showToast(t('toast_saved_offline'));
+      // Vercel blocked — local processing + direct image generation
+      if (pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
+      const emotion = _detectEmotion(text);
+      const keywords = _extractKeywords(text);
+      const image = await generateImage(text, keywords, emotion);
+      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image });
+      showToast(image ? t('toast_saved') : t('toast_saved_offline'));
     }
     setTimeout(() => routeTo('timeline'), 500);
     if (pEl) pEl.style.display = 'none';
   });
-}
-function kw(text) {
-  const stop = new Set(['的','了','是','我','在','有','和','就','不','人','都','一','个','上','也','很','到','说','要','去','你','会','着','没有','看','好','自己','这','那','什么','好像','感觉','觉得','the','a','an','is','was','in','on','at','to','of','and','it','that','this','my','me','I','was']);
-  return text.split(/[\s，。！？、]+/).filter(w => w.length > 1 && !stop.has(w.toLowerCase())).slice(0, 8);
 }
 function resetRecording() { window._recorder?.reset(); }
 
