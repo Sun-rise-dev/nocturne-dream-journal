@@ -3,7 +3,17 @@
  * 后端地址见 backend/server.py，开发时默认 localhost:12450
  */
 
-const API_BASE = 'http://localhost:12450/api';
+const API_BASE = (() => {
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:12450/api';
+  }
+  return 'https://sun-rise-dev.github.io/nocturne-dream-journal/api';
+})();
+
+function authHeaders() {
+  const token = localStorage.getItem('nocturne-token');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
 
 async function apiProcessDream(rawText) {
   try {
@@ -61,4 +71,59 @@ async function apiReactBroadcast(broadcastId, emoji) {
   } catch {
     return { success: false };
   }
+}
+
+// ═══════════════════════ Auth ═══════════════════════
+
+async function apiRegister(username, password) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return await res.json();
+  } catch { return { success: false, error: 'Network error' }; }
+}
+
+async function apiLogin(username, password) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    return await res.json();
+  } catch { return { success: false, error: 'Network error' }; }
+}
+
+async function apiGetProfile() {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
+    return await res.json();
+  } catch { return { success: false }; }
+}
+
+async function apiUpdateProfile(nickname, bio) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ nickname, bio }),
+    });
+    return await res.json();
+  } catch { return { success: false }; }
+}
+
+async function apiLogout() {
+  try {
+    await fetch(`${API_BASE}/auth/logout`, { method: 'POST', headers: authHeaders() });
+  } catch {}
+  localStorage.removeItem('nocturne-token');
+  localStorage.removeItem('nocturne-user');
+}
+
+function isLoggedIn() { return !!localStorage.getItem('nocturne-token'); }
+function getCurrentUser() {
+  try { return JSON.parse(localStorage.getItem('nocturne-user')); } catch { return null; }
 }

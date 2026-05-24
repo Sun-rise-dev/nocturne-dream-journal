@@ -25,6 +25,8 @@ function routeTo(path) {
     switch (path) {
       case 'record': main.innerHTML = renderRecordPage(); initRecordPage(); break;
       case 'broadcast': main.innerHTML = renderBroadcastPage(); break;
+      case 'login': main.innerHTML = renderLoginPage(); break;
+      case 'profile': main.innerHTML = renderProfilePage(); initProfilePage(); break;
       default: main.innerHTML = renderTimelinePage(); break;
     }
     main.style.opacity = '1';
@@ -241,9 +243,17 @@ function renderTimelinePage() {
   const stats = getDreamStats();
   const topE = Object.entries(stats.emotions).sort((a,b) => b[1]-a[1])[0];
 
+  const user = getCurrentUser();
+  const color = user?.avatar_color || '#5B6E82';
+  const initial = user ? (user.nickname||user.username).charAt(0).toUpperCase() : '?';
+  const profilePath = user ? 'profile' : 'login';
+
   let html = `<div class="nav-bar">
     <div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('timeline_subtitle')}</div></div>
-    <button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="user-nav" onclick="routeTo('${profilePath}')" style="background:${color}" aria-label="${user?'个人中心':'登录'}">${initial}</button>
+      <button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button>
+    </div>
   </div>
   <div class="stat-row" onclick="viewStats()" style="cursor:pointer">
     <div class="stat-cell"><span class="stat-value">${stats.total}</span><span class="stat-label">${t('stat_dreams')}</span></div>
@@ -295,7 +305,11 @@ function renderRecordPage() {
 }
 
 function renderBroadcastPage() {
-  return `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div>
+  const user = getCurrentUser();
+  const color2 = user?.avatar_color || '#5B6E82';
+  const init2 = user ? (user.nickname||user.username).charAt(0).toUpperCase() : '?';
+  const pp = user ? 'profile' : 'login';
+  return `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><div style="display:flex;align-items:center;gap:8px"><button class="user-nav" onclick="routeTo('${pp}')" style="background:${color2}" aria-label="Profile">${init2}</button><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div></div>
     <div class="broadcast-feed" id="broadcastFeed">
       <div class="dream-weaver" style="padding:40px 0;display:flex;align-items:center;justify-content:center;gap:16px">
         <div class="weaver-dot"></div><div class="weaver-dot"></div><div class="weaver-dot"></div>
@@ -507,6 +521,94 @@ function initParticles() {
 }
 
 // ═══════════════════════ Init ═══════════════════════
+
+function renderLoginPage() {
+  return `<div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-logo">Nocturne</div>
+      <p class="auth-desc" id="authDesc">${currentLang==='zh'?'登录以同步你的梦境数据':'Sign in to sync your dreams'}</p>
+      <form id="authForm" onsubmit="return false" class="auth-form">
+        <input type="text" id="authUser" placeholder="${currentLang==='zh'?'用户名':'Username'}" class="auth-input" autocomplete="username" minlength="3" maxlength="20" required>
+        <input type="password" id="authPass" placeholder="${currentLang==='zh'?'密码':'Password'}" class="auth-input" autocomplete="current-password" minlength="6" required>
+        <input type="password" id="authPass2" placeholder="${currentLang==='zh'?'确认密码':'Confirm'}" class="auth-input" style="display:none" minlength="6">
+        <div class="auth-error" id="authError"></div>
+        <button type="submit" class="btn btn-primary auth-btn" id="authSubmit">${currentLang==='zh'?'登录':'Sign In'}</button>
+      </form>
+      <p class="auth-switch">
+        <span id="authSwitchText">${currentLang==='zh'?'还没有账号？':"Don't have an account?"}</span>
+        <button class="btn btn-ghost" id="authSwitchBtn" style="font-size:13px">${currentLang==='zh'?'注册':'Register'}</button>
+      </p>
+    </div>
+  </div>`;
+}
+
+async function initLoginPage() {
+  const userEl = document.getElementById('authUser'); const passEl = document.getElementById('authPass');
+  const pass2El = document.getElementById('authPass2'); const errorEl = document.getElementById('authError');
+  const submitBtn = document.getElementById('authSubmit'); const switchBtn = document.getElementById('authSwitchBtn');
+  const switchText = document.getElementById('authSwitchText'); const descEl = document.getElementById('authDesc');
+  let isRegister = false;
+  switchBtn.addEventListener('click', () => {
+    isRegister = !isRegister;
+    pass2El.style.display = isRegister ? 'block' : 'none';
+    submitBtn.textContent = isRegister ? (currentLang==='zh'?'注册':'Register') : (currentLang==='zh'?'登录':'Sign In');
+    switchBtn.textContent = isRegister ? (currentLang==='zh'?'登录':'Sign In') : (currentLang==='zh'?'注册':'Register');
+    switchText.textContent = isRegister ? (currentLang==='zh'?'已有账号？':'Already have one?') : (currentLang==='zh'?'还没有账号？':"Don't have one?");
+    descEl.textContent = isRegister ? (currentLang==='zh'?'创建一个账号来保存你的梦境':'Create an account to save your dreams') : (currentLang==='zh'?'登录以同步你的梦境数据':'Sign in to sync your dreams');
+    errorEl.textContent = '';
+  });
+  document.getElementById('authForm').addEventListener('submit', async () => {
+    const username = userEl.value.trim(); const password = passEl.value;
+    if (!username || !password) { errorEl.textContent = currentLang==='zh'?'请填写所有字段':'Fill all fields'; return; }
+    if (isRegister && password !== pass2El.value) { errorEl.textContent = currentLang==='zh'?'两次密码不一致':'Passwords mismatch'; return; }
+    submitBtn.disabled = true; submitBtn.textContent = '...'; errorEl.textContent = '';
+    const result = isRegister ? await apiRegister(username, password) : await apiLogin(username, password);
+    if (result.success) {
+      localStorage.setItem('nocturne-token', result.token);
+      localStorage.setItem('nocturne-user', JSON.stringify(result.user));
+      showToast(isRegister ? (currentLang==='zh'?'注册成功 ✦':'Registered ✦') : (currentLang==='zh'?'欢迎回来':'Welcome back'));
+      routeTo('timeline');
+    } else { errorEl.textContent = result.error || 'Error'; }
+    submitBtn.disabled = false;
+    submitBtn.textContent = isRegister ? (currentLang==='zh'?'注册':'Register') : (currentLang==='zh'?'登录':'Sign In');
+  });
+}
+
+function renderProfilePage() {
+  const user = getCurrentUser();
+  if (!user) { routeTo('login'); return ''; }
+  const color = user.avatar_color || '#5B6E82';
+  const initial = (user.nickname || user.username).charAt(0).toUpperCase();
+  return `<div class="profile-container">
+    <div class="profile-header">
+      <div class="profile-avatar" style="background:${color}">${initial}</div>
+      <h2 class="profile-name">${esc(user.nickname)}</h2>
+      <p class="profile-username">@${esc(user.username)}</p>
+    </div>
+    <div class="card profile-edit">
+      <label class="profile-label">${currentLang==='zh'?'昵称':'Nickname'}</label>
+      <input type="text" id="profileNickname" class="auth-input" value="${esc(user.nickname)}" maxlength="30">
+      <label class="profile-label">${currentLang==='zh'?'简介':'Bio'}</label>
+      <input type="text" id="profileBio" class="auth-input" value="${esc(user.bio||'')}" maxlength="200" placeholder="${currentLang==='zh'?'写一句话介绍自己':'A short intro'}">
+      <div class="profile-actions">
+        <button class="btn btn-primary" onclick="saveProfile()">${currentLang==='zh'?'保存':'Save'}</button>
+        <button class="btn btn-ghost" onclick="handleLogout()">${currentLang==='zh'?'退出登录':'Log Out'}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function initProfilePage() {}
+
+async function saveProfile() {
+  const nickname = document.getElementById('profileNickname')?.value?.trim() || '';
+  const bio = document.getElementById('profileBio')?.value?.trim() || '';
+  const result = await apiUpdateProfile(nickname, bio);
+  if (result.success) { localStorage.setItem('nocturne-user', JSON.stringify(result.user)); showToast(currentLang==='zh'?'已保存':'Saved'); routeTo('profile'); }
+  else { showToast(result.error || 'Failed'); }
+}
+
+async function handleLogout() { await apiLogout(); showToast(currentLang==='zh'?'已退出':'Logged out'); routeTo('timeline'); }
 
 function initTimelinePage() {}
 function initRecordPage() { window._recorder = new DreamRecorder(); }
