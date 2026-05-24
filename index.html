@@ -17,45 +17,45 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Inline splash canvas styles — critical for first paint */
+    #splashCanvas {
+      position: fixed; inset: 0; z-index: 500;
+      background: #060D18;
+    }
+    #splashCanvas.hide {
+      opacity: 0;
+      transition: opacity 0.7s ease;
+      pointer-events: none;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <a href="#mainView" class="skip-link">跳到主内容</a>
     <div class="light-pools"></div>
     <canvas id="particles" aria-hidden="true" role="presentation"></canvas>
-
-    <!-- 主内容 -->
     <main id="mainView"></main>
-
-    <!-- 底部导航 -->
     <nav class="bottom-nav" id="bottomNav" role="navigation" aria-label="主导航">
       <a href="#timeline" class="nav-tab" data-route="timeline">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span>时间线</span>
       </a>
       <a href="#record" class="nav-tab nav-tab--center" data-route="record">
         <div class="nav-record-btn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></svg>
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/></svg>
         </div>
         <span>记录</span>
       </a>
       <a href="#broadcast" class="nav-tab" data-route="broadcast">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
         <span>广播</span>
       </a>
     </nav>
   </div>
 
-  <!-- 启动动画 -->
-  <div class="splash" id="splash">
-    <div class="splash-content">
-      <div class="splash-moon">
-        <div class="splash-moon-inner"></div>
-      </div>
-      <h1 class="splash-title">Nocturne</h1>
-      <p class="splash-sub" id="splashTagline">dreams, like stars</p>
-    </div>
-  </div>
+  <!-- Splash Canvas -->
+  <canvas id="splashCanvas"></canvas>
 
   <div id="toast" class="toast" hidden aria-live="polite" role="status"></div>
 
@@ -63,12 +63,5 @@
   <script src="data.js"></script>
   <script src="api.js"></script>
   <script src="app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js')
-        .then(() => console.log('PWA: Service Worker registered'))
-        .catch(() => console.log('PWA: SW registration failed'));
-    }
-  </script>
 </body>
 </html>

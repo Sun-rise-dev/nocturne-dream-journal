@@ -418,6 +418,158 @@ document.addEventListener('touchend', (e) => {
   if (dx > 60 && dx > dy * 1.5 && touchSX < 40) routeTo('timeline');
 });
 
+// ═══════════════════════ Splash — light particles gather into moon ═══════════════════════
+
+function initSplash() {
+  const canvas = document.getElementById('splashCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) { canvas.remove(); return; }
+
+  let W, H;
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  const cx = W / 2, cy = H * 0.38;
+  const moonR = Math.min(50, W * 0.12);
+  let time = 0;
+  let animId;
+
+  // Phase timing
+  const PHASE_GATHER = 2.8;  // particles slowly gather into moon
+  const PHASE_HOLD = 1.2;    // moon stays, title appears
+  const PHASE_FADE = 0.8;    // gentle fade out to app
+  const TOTAL = PHASE_GATHER + PHASE_HOLD + PHASE_FADE;
+
+  // Edge-spawned particles
+  const particles = [];
+  const PARTICLE_COUNT = Math.min(55, Math.floor(W * H / 6000));
+
+  function spawnParticle(delay) {
+    const edge = Math.floor(Math.random() * 4);
+    let x, y;
+    switch (edge) {
+      case 0: x = Math.random() * W; y = -20; break;          // top
+      case 1: x = W + 20; y = Math.random() * H; break;       // right
+      case 2: x = Math.random() * W; y = H + 20; break;       // bottom
+      default: x = -20; y = Math.random() * H; break;          // left
+    }
+    // Target: random point within the moon circle
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * moonR * 0.85;
+    const tx = cx + Math.cos(angle) * dist;
+    const ty = cy + Math.sin(angle) * dist;
+
+    return {
+      x, y, tx, ty,
+      start: delay,
+      duration: 1.4 + Math.random() * 1.4,
+      r: Math.random() * 2.2 + 0.8,
+      brightness: Math.random() * 0.6 + 0.3,
+      settled: false,
+    };
+  }
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push(spawnParticle(0.3 + Math.random() * 1.5));
+  }
+
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function draw(ts) {
+    time += 0.016; // ~60fps step
+    ctx.clearRect(0, 0, W, H);
+
+    // Dark background
+    ctx.fillStyle = '#060D18';
+    ctx.fillRect(0, 0, W, H);
+
+    // Draw particles
+    for (const p of particles) {
+      const elapsed = time - p.start;
+      if (elapsed < 0) continue;
+
+      if (!p.settled) {
+        const prog = Math.min(1, elapsed / p.duration);
+        const t = easeInOutCubic(prog);
+        p.x = p.tx + (p.x - p.tx) * (1 - t);
+        p.y = p.ty + (p.y - p.ty) * (1 - t);
+        if (prog >= 1) p.settled = true;
+      }
+
+      // Glow
+      const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      gradient.addColorStop(0, `rgba(240, 220, 160, ${p.brightness})`);
+      gradient.addColorStop(0.4, `rgba(220, 200, 140, ${p.brightness * 0.5})`);
+      gradient.addColorStop(1, 'rgba(220, 200, 140, 0)');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 0.6, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 245, 210, ${p.brightness})`;
+      ctx.fill();
+    }
+
+    // Moon crescent outline (emerges as particles settle)
+    if (time > PHASE_GATHER * 0.5) {
+      const moonAlpha = Math.min(1, (time - PHASE_GATHER * 0.6) / (PHASE_GATHER * 0.4));
+      // Outer glow
+      const glow = ctx.createRadialGradient(cx, cy, moonR * 0.7, cx, cy, moonR * 2.2);
+      glow.addColorStop(0, `rgba(220, 200, 160, ${0.15 * moonAlpha})`);
+      glow.addColorStop(1, 'rgba(220, 200, 160, 0)');
+      ctx.beginPath();
+      ctx.arc(cx, cy, moonR * 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+
+      // Crescent rim
+      ctx.beginPath();
+      ctx.arc(cx, cy, moonR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(220, 200, 160, ${0.25 * moonAlpha})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Title text
+    if (time > PHASE_GATHER) {
+      const textAlpha = Math.min(1, (time - PHASE_GATHER) / 0.8);
+      ctx.fillStyle = `rgba(225, 220, 210, ${0.9 * textAlpha})`;
+      ctx.font = `italic ${Math.min(38, W * 0.09)}px 'Cormorant Garamond', 'Georgia', serif`;
+      ctx.textAlign = 'center';
+      ctx.fillText('Nocturne', cx, cy + moonR + 48);
+
+      // Tagline
+      ctx.fillStyle = `rgba(200, 190, 175, ${0.4 * textAlpha})`;
+      ctx.font = `${Math.min(12, W * 0.028)}px 'Courier New', monospace`;
+      ctx.textAlign = 'center';
+      const tag = t('tagline');
+      ctx.fillText(tag, cx, cy + moonR + 72);
+    }
+
+    // Fade out
+    if (time > PHASE_GATHER + PHASE_HOLD) {
+      const fadeProg = (time - PHASE_GATHER - PHASE_HOLD) / PHASE_FADE;
+      canvas.style.opacity = Math.max(0, 1 - fadeProg);
+    }
+
+    if (time < TOTAL + 0.3) {
+      animId = requestAnimationFrame(draw);
+    } else {
+      canvas.classList.add('hide');
+      setTimeout(() => canvas.remove(), 800);
+    }
+  }
+
+  animId = requestAnimationFrame(draw);
+}
+
 // ═══════════════════════ Particle System — gentle dust motes in moonlight ═══════════════════════
 
 function initParticles() {
@@ -633,19 +785,12 @@ async function initBroadcastPage() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const tagEl = document.getElementById('splashTagline');
-  if (tagEl) tagEl.textContent = t('tagline');
-
   initParticles();
   updateTabLabels();
   initNavigation();
   const hash = window.location.hash.replace('#', '') || 'timeline';
   routeTo(hash);
 
-  // Splash — auto-dismiss after 2s
-  const splash = document.getElementById('splash');
-  if (splash) {
-    setTimeout(() => { splash.classList.add('fade-out'); }, 1800);
-    setTimeout(() => { if (splash.parentNode) splash.remove(); }, 2400);
-  }
+  // Light-gathering splash
+  initSplash();
 });

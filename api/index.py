@@ -8,6 +8,8 @@ import os
 import re
 import secrets
 import sys
+
+import requests
 import uuid
 from datetime import datetime, timezone
 from html import escape as html_escape
@@ -75,8 +77,71 @@ def _process_dream(text):
         svc = DreamService()
         return svc.process(text)
     except Exception:
-        words = [w for w in re.findall(r'[\w一-鿿]{2,}', text) if w not in {'的','了','是','我','在','有','和','就','不','人','都','一','个','the','a','an','is','was'}]
-        return {'success': True, 'narrative': text, 'emotion': 'wonder', 'keywords': words[:8], 'title': text[:28]}
+        pass
+
+    # Local fallback
+    emotion = _detect_emotion(text)
+    words = [w for w in re.findall(r'[\w一-鿿]{2,}', text) if w not in {'的','了','是','我','在','有','和','就','不','人','都','一','个','the','a','an','is','was'}]
+    keywords = words[:8]
+    narrative = text
+
+    # Try image generation directly
+    image_url = None
+    try:
+        image_url = _gen_image(narrative, keywords, emotion)
+    except Exception:
+        pass
+
+    return {'success': True, 'narrative': narrative, 'emotion': emotion, 'keywords': keywords, 'title': text[:28], 'image_url': image_url}
+
+
+def _detect_emotion(text):
+    patterns = {
+        'fear': ['害怕','恐惧','逃跑','黑暗','追赶','坠落'], 'joy': ['开心','笑','美','幸福','温暖'],
+        'calm': ['安静','水','湖','海','风','云','月','星星'], 'anxiety': ['考试','迟到','找','迷路','急'],
+        'wonder': ['飞','魔法','变','穿越','巨大','奇怪','宇宙'], 'sad': ['哭','难过','失去','离别'],
+        'strange': ['扭曲','颠倒','动物','说话','变成'],
+    }
+    scores = {e: sum(text.count(w) for w in ws) for e, ws in patterns.items()}
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else 'wonder'
+
+
+def _gen_image(narrative, keywords, emotion):
+    try:
+        moods = {
+            'fear': 'dark and mysterious, deep purple and blue tones',
+            'joy': 'warm golden light, bright and radiant',
+            'calm': 'serene and peaceful, soft blue and teal tones',
+            'anxiety': 'tense and surreal, fragmented light',
+            'wonder': 'magical and ethereal, shimmering starlight',
+            'sad': 'melancholic and quiet, soft grey blue',
+            'strange': 'surreal and dreamlike, impossible geometry',
+        }
+        mood = moods.get(emotion, 'dreamlike and ethereal')
+        image_prompt = (
+            f"Create a dreamlike illustration. Atmosphere: {mood}. "
+            f"Style: soft watercolor meets oil painting, misty edges, luminous. "
+            f"Key elements: {', '.join(keywords[:5]) if keywords else 'surreal landscape'}. "
+            f"Essence: {narrative[:200]}. Aspect ratio 3:4, vertical. No text."
+        )
+        resp = requests.post(
+            'https://shiyunapi.com/v1/chat/completions',
+            headers={
+                'Authorization': 'Bearer sk-UCeUxIpayCYEiuzpviPEay8dkMy2bsG15Ww6hHlJ1gIbnHUx',
+                'Content-Type': 'application/json',
+            },
+            json={'model': 'gemini-3.1-flash-image-preview', 'messages': [{'role': 'user', 'content': image_prompt}], 'max_tokens': 4096, 'temperature': 1.0},
+            timeout=120,
+        )
+        if resp.status_code == 200:
+            content = resp.json().get('choices', [{}])[0].get('message', {}).get('content', '')
+            urls = re.findall(r'!\[.*?\]\((https?://[^\s)]+)\)', content)
+            if urls: return urls[0]
+            if content.startswith('data:image'): return content
+    except Exception:
+        pass
+    return None
 
 # ── Router ──
 

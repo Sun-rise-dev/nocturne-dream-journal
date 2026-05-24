@@ -1,16 +1,20 @@
 """
-Nocturne · 梦境整理服务 — AI 叙事整理 + 关键词提取 + 情绪识别
+Nocturne · 梦境整理服务 — AI 叙事整理 + 关键词提取 + 情绪识别 + 梦境插图
 """
+import base64
 import logging
 import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Image generation config
+IMAGE_API_BASE = 'https://shiyunapi.com'
+IMAGE_API_KEY = 'sk-UCeUxIpayCYEiuzpviPEay8dkMy2bsG15Ww6hHlJ1gIbnHUx'
+IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
+
 
 class DreamService:
-    """梦境整理服务：将碎片语音转写整理为连贯叙事"""
-
     def __init__(self):
         self.prompt_template = self._load_prompt()
         self._text_client = None
@@ -22,7 +26,6 @@ class DreamService:
         return '{text}'
 
     def _get_text_client(self):
-        """复用红墨的文本生成客户端"""
         if self._text_client is None:
             try:
                 import yaml
@@ -36,56 +39,112 @@ class DreamService:
                     provider_config = providers.get(active, {})
                     if provider_config.get('api_key'):
                         self._text_client = get_text_chat_client(provider_config)
-                        logger.info(f"文本客户端已初始化: {active}")
+                        logger.info(f"Text client initialized: {active}")
             except Exception as e:
-                logger.warning(f"无法初始化文本客户端: {e}")
+                logger.warning(f"Cannot init text client: {e}")
         return self._text_client
 
     def process(self, text: str) -> dict:
-        """
-        处理梦境转写文本
-        返回: {success, narrative, emotion, keywords, title}
-        """
-        # 本地处理（不需要 AI 也能跑）
         emotion = self._detect_emotion(text)
         keywords = self._extract_keywords(text)
         title = self._generate_title(text)
 
-        # 尝试 AI 叙事整理
         client = self._get_text_client()
         if client:
             try:
                 prompt = self.prompt_template.format(text=text)
                 response = client.generate_text(
-                    prompt=prompt,
-                    model=None,
-                    temperature=0.7,
-                    max_output_tokens=1024,
+                    prompt=prompt, model=None, temperature=0.7, max_output_tokens=1024,
                 )
                 narrative = response.strip()
-                logger.info(f"AI 叙事整理完成: {len(narrative)} 字")
+                logger.info(f"AI narrative: {len(narrative)} chars")
+
+                # Generate dream illustration
+                image_url = self._generate_image(narrative, keywords, emotion)
+
                 return {
-                    'success': True,
-                    'narrative': narrative,
-                    'emotion': emotion,
-                    'keywords': keywords,
-                    'title': title,
+                    'success': True, 'narrative': narrative,
+                    'emotion': emotion, 'keywords': keywords, 'title': title,
+                    'image_url': image_url,
                 }
             except Exception as e:
-                logger.warning(f"AI 调用失败，使用本地处理: {e}")
+                logger.warning(f"AI call failed, local fallback: {e}")
 
-        # 本地降级：清理文本作为叙事
         cleaned = self._clean_text(text)
         return {
-            'success': True,
-            'narrative': cleaned,
-            'emotion': emotion,
-            'keywords': keywords,
-            'title': title,
+            'success': True, 'narrative': cleaned,
+            'emotion': emotion, 'keywords': keywords, 'title': title,
+            'image_url': None,
         }
 
+    def _generate_image(self, narrative: str, keywords: list, emotion: str) -> str | None:
+        """Generate dream illustration via image API"""
+        try:
+            import requests
+
+            emotion_moods = {
+                'fear': 'dark and mysterious atmosphere, deep purple and blue tones',
+                'joy': 'warm golden light, bright and radiant atmosphere',
+                'calm': 'serene and peaceful, soft blue and teal tones',
+                'anxiety': 'tense and surreal, fragmented light and shadow',
+                'wonder': 'magical and ethereal, shimmering starlight and iridescent colors',
+                'sad': 'melancholic and quiet, soft grey and muted blue tones',
+                'strange': 'surreal and dreamlike, impossible geometry and floating elements',
+            }
+            mood = emotion_moods.get(emotion, 'dreamlike and ethereal')
+
+            image_prompt = (
+                f"Create a dreamlike illustration for a dream. Atmosphere: {mood}. "
+                f"Style: soft watercolor meets oil painting, misty edges, luminous quality. "
+                f"Key elements from the dream: {', '.join(keywords[:5]) if keywords else 'surreal landscape'}. "
+                f"Dream narrative essence: {narrative[:200]}. "
+                f"Aspect ratio 3:4, vertical composition. No text, no borders."
+            )
+
+            logger.info(f"Generating image, prompt: {image_prompt[:100]}...")
+
+            resp = requests.post(
+                f'{IMAGE_API_BASE}/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {IMAGE_API_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'model': IMAGE_MODEL,
+                    'messages': [{'role': 'user', 'content': image_prompt}],
+                    'max_tokens': 4096,
+                    'temperature': 1.0,
+                },
+                timeout=120,
+            )
+
+            if resp.status_code != 200:
+                logger.error(f"Image API error: {resp.status_code} {resp.text[:200]}")
+                return None
+
+            result = resp.json()
+            content = result.get('choices', [{}])[0].get('message', {}).get('content', '')
+
+            # Parse markdown image URL
+            urls = re.findall(r'!\[.*?\]\((https?://[^\s)]+)\)', content)
+            if urls:
+                logger.info(f"Image URL extracted: {urls[0][:80]}...")
+                return urls[0]
+
+            # Parse base64
+            if content.startswith('data:image'):
+                # For Vercel deployment, store base64 directly
+                logger.info("Image: base64 data URL")
+                return content
+
+            logger.warning(f"No image found in response: {str(content)[:200]}")
+            return None
+
+        except Exception as e:
+            logger.warning(f"Image generation failed: {e}")
+            return None
+
     def _detect_emotion(self, text: str) -> str:
-        """本地情绪检测"""
         patterns = {
             'fear': ['害怕', '恐惧', '逃跑', '黑暗', '追赶', '坠落', '死亡', '血'],
             'joy': ['开心', '笑', '美', '幸福', '温暖', '爱', '光明', '彩虹'],
@@ -115,12 +174,10 @@ class DreamService:
         return [w for w, _ in sorted_words[:8]]
 
     def _generate_title(self, text: str) -> str:
-        """从内容生成简短标题"""
         clean = text.replace('...', ' ').replace('，', ' ').replace('。', ' ')
         words = clean.strip().split()
         return ' '.join(words[:8]) if words else '未命名之梦'
 
     def _clean_text(self, text: str) -> str:
-        """本地清理文本：去重复词、加标点"""
         text = re.sub(r'(\S)\1{2,}', r'\1\1', text)
         return text.strip()
