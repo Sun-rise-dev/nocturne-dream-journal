@@ -32,6 +32,7 @@ const I18N = {
     broadcast_title: '梦境广播',
     broadcast_subtitle: '匿名分享 — 只有梦本身被看见',
     broadcast_empty: '还没有人分享梦境',
+    broadcast_offline: '无法连接，请检查网络',
 
     insights_title: '梦境分析',
     insights_subtitle: '已记录 ? 个梦境',
@@ -84,6 +85,7 @@ const I18N = {
     broadcast_title: 'Dream Broadcast',
     broadcast_subtitle: 'Anonymous — only the dream is visible',
     broadcast_empty: 'No dreams shared yet',
+    broadcast_offline: 'Cannot connect. Check your network.',
 
     insights_title: 'Dream Insights',
     insights_subtitle: '? dreams recorded',

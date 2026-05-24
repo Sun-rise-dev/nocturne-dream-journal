@@ -151,6 +151,7 @@ class DreamRecorder {
       };
       if (el) el.textContent = msgs[e.error] || (currentLang === 'zh' ? '语音识别出错' : 'Speech error');
       this.isRecording = false;
+      if (this.mediaRecorder && this.mediaRecorder.state === 'recording') this.mediaRecorder.stop();
       document.getElementById('recordBtn')?.classList.remove('recording');
       ['ripple1','ripple2','ripple3'].forEach(id => { const r = document.getElementById(id); if (r) r.style.display = 'none'; });
       clearInterval(this.timer);
@@ -333,13 +334,13 @@ async function renderTimelinePage() {
   const profilePath = user ? 'profile' : 'login';
 
   let html = `<div class="nav-bar">
-    <div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('timeline_subtitle')}</div></div>
+    <div><h1 class="nav-title">Nocturne</h1><div class="nav-subtitle">${t('timeline_subtitle')}</div></div>
     <div style="display:flex;align-items:center;gap:8px">
       <button class="user-nav" onclick="routeTo('${profilePath}')" style="background:${color}" aria-label="${user?'个人中心':'登录'}">${initial}</button>
       <button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button>
     </div>
   </div>
-  <div class="stat-row" onclick="viewStats()" style="cursor:pointer">
+  <div class="stat-row" role="button" tabindex="0" onclick="viewStats()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();viewStats()}" aria-label="${currentLang==='zh'?'查看梦境分析':'View dream insights'}">
     <div class="stat-cell"><span class="stat-value">${stats.total}</span><span class="stat-label">${t('stat_dreams')}</span></div>
     <div class="stat-cell"><span class="stat-value">${Object.keys(stats.keywords).length}</span><span class="stat-label">${t('stat_symbols')}</span></div>
     <div class="stat-cell"><span class="stat-value">${em(topE?.[0]).symbol}</span><span class="stat-label">${t('stat_mood')}</span></div>
@@ -363,7 +364,6 @@ async function renderTimelinePage() {
         <span class="dream-cell-chevron"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
       </button>`;
     });
-    html += '</div>';
   }
   return html;
 }
@@ -386,7 +386,7 @@ function renderRecordPage() {
       <button class="btn btn-primary" onclick="processDream()">${t('record_weave')}</button>
     </div>
     <div class="record-processing" id="recordProcessing" style="display:none">
-      <div class="processing-dots"><div class="processing-dot"></div><div class="processing-dot"></div><div class="processing-dot"></div></div>
+      <div class="dream-weaver"><div class="weaver-dot"></div><div class="weaver-dot"></div><div class="weaver-dot"></div></div>
       <p class="processing-text">${t('record_weaving')}</p>
     </div>
   </div>`;
@@ -397,7 +397,7 @@ function renderBroadcastPage() {
   const color2 = user?.avatar_color || '#5B6E82';
   const init2 = user ? (user.nickname||user.username).charAt(0).toUpperCase() : '?';
   const pp = user ? 'profile' : 'login';
-  return `<div class="nav-bar"><div><div class="nav-title">Nocturne</div><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><div style="display:flex;align-items:center;gap:8px"><button class="user-nav" onclick="routeTo('${pp}')" style="background:${color2}" aria-label="Profile">${init2}</button><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div></div>
+  return `<div class="nav-bar"><div><h1 class="nav-title">Nocturne</h1><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><div style="display:flex;align-items:center;gap:8px"><button class="user-nav" onclick="routeTo('${pp}')" style="background:${color2}" aria-label="Profile">${init2}</button><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div></div>
     <div class="broadcast-feed" id="broadcastFeed">
       <div class="dream-weaver" style="padding:40px 0;display:flex;align-items:center;justify-content:center;gap:16px">
         <div class="weaver-dot"></div><div class="weaver-dot"></div><div class="weaver-dot"></div>
@@ -464,8 +464,16 @@ async function deleteDream(id) {
   };
   if (toast) {
     toast.style.cursor = 'pointer';
+    toast.setAttribute('role', 'button');
+    toast.setAttribute('tabindex', '0');
     toast.addEventListener('click', undo);
-    setTimeout(() => { toast.style.cursor = ''; toast.removeEventListener('click', undo); }, 4000);
+    toast.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); undo(); } });
+    setTimeout(() => {
+      toast.style.cursor = '';
+      toast.removeAttribute('role');
+      toast.removeAttribute('tabindex');
+      toast.removeEventListener('click', undo);
+    }, 4000);
   }
 }
 
@@ -486,7 +494,7 @@ async function viewStats() {
         <button class="detail-back" onclick="routeTo('timeline')" aria-label="${t('detail_back')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
         <span class="detail-nav-label">${t('insights_title')}</span>
       </div>
-      <div class="nav-bar"><div><div class="nav-title">${t('insights_title')}</div><div class="nav-subtitle">${t('insights_subtitle', stats.total)}</div></div></div>
+      <div class="nav-bar"><div><h1 class="nav-title">${t('insights_title')}</h1><div class="nav-subtitle">${t('insights_subtitle', stats.total)}</div></div></div>
       <div class="stat-section"><h2 class="section-header">${t('insights_emotions')}</h2><div class="card-list">
         ${topEmo.map(([e,c]) => `<div class="card emotion-bar-row"><span class="emotion-emoji">${em(e).symbol}</span><span class="emotion-label">${em(e).label}</span><div class="emotion-bar-track"><div class="emotion-bar-fill" style="width:${(c/maxE*100)}%"></div></div><span class="emotion-count">${c}</span></div>`).join('')}
       </div></div>
@@ -514,6 +522,7 @@ document.addEventListener('touchend', (e) => {
 function initSplash() {
   const canvas = document.getElementById('splashCanvas');
   if (!canvas) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { canvas.classList.add('hide'); setTimeout(() => canvas.remove(), 800); return; }
   const ctx = canvas.getContext('2d');
   if (!ctx) { canvas.remove(); return; }
 
@@ -775,11 +784,14 @@ function initParticles() {
 function renderLoginPage() {
   return `<div class="auth-container">
     <div class="auth-card">
-      <div class="auth-logo">Nocturne</div>
+      <h1 class="auth-logo">Nocturne</div>
       <p class="auth-desc" id="authDesc">${currentLang==='zh'?'登录以同步你的梦境数据':'Sign in to sync your dreams'}</p>
       <form id="authForm" onsubmit="return false" class="auth-form">
+        <label for="authUser" class="visually-hidden">${currentLang==='zh'?'用户名':'Username'}</label>
         <input type="text" id="authUser" placeholder="${currentLang==='zh'?'用户名':'Username'}" class="auth-input" autocomplete="username" minlength="3" maxlength="20" required>
+        <label for="authPass" class="visually-hidden">${currentLang==='zh'?'密码':'Password'}</label>
         <input type="password" id="authPass" placeholder="${currentLang==='zh'?'密码':'Password'}" class="auth-input" autocomplete="current-password" minlength="6" required>
+        <label for="authPass2" class="visually-hidden">${currentLang==='zh'?'确认密码':'Confirm'}</label>
         <input type="password" id="authPass2" placeholder="${currentLang==='zh'?'确认密码':'Confirm'}" class="auth-input" style="display:none" minlength="6">
         <div class="auth-error" id="authError" role="alert"></div>
         <button type="submit" class="btn btn-primary auth-btn" id="authSubmit">${currentLang==='zh'?'登录':'Sign In'}</button>
@@ -837,9 +849,9 @@ function renderProfilePage() {
       <p class="profile-username">@${esc(user.username)}</p>
     </div>
     <div class="card profile-edit">
-      <label class="profile-label">${currentLang==='zh'?'昵称':'Nickname'}</label>
+      <label class="profile-label" for="profileNickname">${currentLang==='zh'?'昵称':'Nickname'}</label>
       <input type="text" id="profileNickname" class="auth-input" value="${esc(user.nickname)}" maxlength="30">
-      <label class="profile-label">${currentLang==='zh'?'简介':'Bio'}</label>
+      <label class="profile-label" for="profileBio">${currentLang==='zh'?'简介':'Bio'}</label>
       <input type="text" id="profileBio" class="auth-input" value="${esc(user.bio||'')}" maxlength="200" placeholder="${currentLang==='zh'?'写一句话介绍自己':'A short intro'}">
       <div class="profile-actions">
         <button class="btn btn-primary" onclick="saveProfile()">${currentLang==='zh'?'保存':'Save'}</button>
@@ -901,7 +913,7 @@ async function initBroadcastPage() {
   if (!feed) return;
   const { broadcasts, online } = await loadBroadcast();
   if (broadcasts.length === 0) {
-    const msg = online ? t('broadcast_empty') : (currentLang === 'zh' ? '无法连接，请检查网络' : 'Cannot connect. Check your network.');
+    const msg = online ? t('broadcast_empty') : t('broadcast_offline');
     feed.innerHTML = `<div class="broadcast-empty-cell"><p>${msg}</p></div>`;
     return;
   }
