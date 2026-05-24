@@ -30,15 +30,6 @@ function addDream(dream) {
   return dream;
 }
 
-function updateDream(id, updates) {
-  const dreams = loadDreams();
-  const idx = dreams.findIndex(d => d.id === id);
-  if (idx === -1) return null;
-  dreams[idx] = { ...dreams[idx], ...updates };
-  saveDreams(dreams);
-  return dreams[idx];
-}
-
 function getDreamStats() {
   const dreams = loadDreams();
   const stats = { total: dreams.length, emotions: {}, keywords: {}, byDate: {} };
@@ -80,15 +71,14 @@ async function shareDream(id) {
 }
 
 async function loadBroadcast() {
-  // Try API first
   const result = await apiGetBroadcasts();
-  if (result.success && result.broadcasts.length > 0) {
-    return result.broadcasts;
+  if (result.success) {
+    return { broadcasts: result.broadcasts, online: true };
   }
   // Fallback to localStorage
   try {
-    return JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]');
-  } catch { return []; }
+    return { broadcasts: JSON.parse(localStorage.getItem('nocturne-broadcast') || '[]'), online: false };
+  } catch { return { broadcasts: [], online: false }; }
 }
 
 async function reactToDream(broadcastId, emoji) {

@@ -26,7 +26,7 @@ function routeTo(path) {
       case 'record': main.innerHTML = renderRecordPage(); initRecordPage(); break;
       case 'broadcast': main.innerHTML = renderBroadcastPage(); break;
       case 'login': main.innerHTML = renderLoginPage(); break;
-      case 'profile': main.innerHTML = renderProfilePage(); initProfilePage(); break;
+      case 'profile': main.innerHTML = renderProfilePage(); break;
       default: main.innerHTML = renderTimelinePage(); break;
     }
     main.style.opacity = '1';
@@ -140,6 +140,19 @@ class DreamRecorder {
     };
     this.recognition.onerror = (e) => {
       if (e.error === 'no-speech') return;
+      const el = document.getElementById('recordStatus');
+      const msgs = {
+        'not-allowed': currentLang === 'zh' ? '麦克风权限被拒绝' : 'Microphone access denied',
+        'audio-capture': currentLang === 'zh' ? '无法访问麦克风' : 'Cannot access microphone',
+        'network': currentLang === 'zh' ? '网络连接异常' : 'Network error',
+        'aborted': currentLang === 'zh' ? '录音已中断' : 'Recording aborted',
+      };
+      if (el) el.textContent = msgs[e.error] || (currentLang === 'zh' ? '语音识别出错' : 'Speech error');
+      this.isRecording = false;
+      document.getElementById('recordBtn')?.classList.remove('recording');
+      ['ripple1','ripple2','ripple3'].forEach(id => { const r = document.getElementById(id); if (r) r.style.display = 'none'; });
+      clearInterval(this.timer);
+      document.getElementById('recordTimer').textContent = '00:00';
     };
     this.recognition.onend = () => { if (this.isRecording) this.recognition.start(); };
     document.getElementById('recordBtn')?.addEventListener('click', () => this.toggle());
@@ -156,7 +169,7 @@ class DreamRecorder {
       const el = document.getElementById(id);
       if (el) { el.style.display = 'block'; el.style.animation = 'none'; el.offsetHeight; el.style.animation = ''; }
     });
-    const el = document.getElementById('recordTranscript'); if (el) el.innerHTML = '';
+    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = ''; }
     document.getElementById('recordActions').style.display = 'none';
     this.timer = setInterval(() => {
       this.seconds++;
@@ -181,7 +194,7 @@ class DreamRecorder {
   reset() {
     this.transcript = ''; this.seconds = 0;
     document.getElementById('recordTimer').textContent = '00:00';
-    const el = document.getElementById('recordTranscript'); if (el) el.innerHTML = '';
+    const el = document.getElementById('recordTranscript'); if (el) { el.innerHTML = ''; el.style.display = 'none'; }
     document.getElementById('recordActions').style.display = 'none';
     document.getElementById('recordStatus').textContent = t('record_status_idle');
   }
@@ -266,7 +279,7 @@ function renderTimelinePage() {
   for (const [label, group] of Object.entries(groups)) {
     html += `<h3 class="section-header">${label.toUpperCase()}</h3>`;
     group.forEach(dream => {
-      html += `<button class="card dream-cell" onclick="viewDream('${dream.id}')" style="width:100%;text-align:left;font:inherit">
+      html += `<button class="card dream-cell" onclick="viewDream('${dream.id}')" style="width:100%;text-align:left;font:inherit" aria-label="${esc(dream.narrative?.slice(0, 40) || dream.rawText?.slice(0, 40) || '')}">
         <div class="dream-cell-thumb">${dream.image ? `<img src="${dream.image}" alt="" loading="lazy">` : `<div class="dream-cell-thumb-placeholder">${em(dream.emotion).symbol}</div>`}</div>
         <div class="dream-cell-body">
           <div class="dream-cell-title">${esc(dream.narrative?.slice(0, 50) || dream.rawText?.slice(0, 50) || '···')}</div>
@@ -324,6 +337,7 @@ async function reactToBroadcast(id, emoji) { await reactToDream(id, emoji); rout
 function viewDream(id) {
   const dream = findDream(id);
   if (!dream) { showToast(t('toast_not_found')); return; }
+  document.title = 'Nocturne · Dream';
   const e = em(dream.emotion);
   const main = document.getElementById('mainView');
   main.style.opacity = '0';
@@ -384,6 +398,7 @@ function deleteDream(id) {
 function viewStats() {
   const stats = getDreamStats();
   if (stats.total === 0) return;
+  document.title = 'Nocturne · Insights';
   const topEmo = Object.entries(stats.emotions).sort((a,b) => b[1]-a[1]).slice(0, 6);
   const topKw = Object.entries(stats.keywords).sort((a,b) => b[1]-a[1]).slice(0, 15);
   const maxE = topEmo[0]?.[1] || 1;
@@ -396,10 +411,10 @@ function viewStats() {
         <span class="detail-nav-label">${t('insights_title')}</span>
       </div>
       <div class="nav-bar"><div><div class="nav-title">${t('insights_title')}</div><div class="nav-subtitle">${t('insights_subtitle', stats.total)}</div></div></div>
-      <div class="stat-section"><div class="section-header">${t('insights_emotions')}</div><div class="card-list">
+      <div class="stat-section"><h2 class="section-header">${t('insights_emotions')}</h2><div class="card-list">
         ${topEmo.map(([e,c]) => `<div class="card emotion-bar-row"><span class="emotion-emoji">${em(e).symbol}</span><span class="emotion-label">${em(e).label}</span><div class="emotion-bar-track"><div class="emotion-bar-fill" style="width:${(c/maxE*100)}%"></div></div><span class="emotion-count">${c}</span></div>`).join('')}
       </div></div>
-      <div class="stat-section"><div class="section-header">${t('insights_symbols')}</div><div class="keyword-cloud">
+      <div class="stat-section"><h2 class="section-header">${t('insights_symbols')}</h2><div class="keyword-cloud">
         ${(() => { const maxKw = topKw[0]?.[1] || 1; return topKw.map(([k,c]) => `<span class="keyword-item" style="font-size:${Math.max(12,Math.min(20,12+c*2))}px;opacity:${0.4+(c/maxKw)*0.6}">${esc(k)}</span>`).join(''); })()}
       </div></div>`;
     main.style.opacity = '1';
@@ -426,12 +441,15 @@ function initSplash() {
   const ctx = canvas.getContext('2d');
   if (!ctx) { canvas.remove(); return; }
 
-  let W, H;
-  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  let W, H, cx, cy;
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cx = W / 2;
+    cy = H * 0.38;
+  }
   resize();
   window.addEventListener('resize', resize);
-
-  const cx = W / 2, cy = H * 0.38;
   const moonR = Math.min(50, W * 0.12);
   let time = 0;
   let animId;
@@ -670,6 +688,10 @@ function initParticles() {
     if (e.matches) cancelAnimationFrame(animId);
     else animId = requestAnimationFrame(draw);
   });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(animId); }
+    else { animId = requestAnimationFrame(draw); }
+  });
 }
 
 // ═══════════════════════ Init ═══════════════════════
@@ -683,7 +705,7 @@ function renderLoginPage() {
         <input type="text" id="authUser" placeholder="${currentLang==='zh'?'用户名':'Username'}" class="auth-input" autocomplete="username" minlength="3" maxlength="20" required>
         <input type="password" id="authPass" placeholder="${currentLang==='zh'?'密码':'Password'}" class="auth-input" autocomplete="current-password" minlength="6" required>
         <input type="password" id="authPass2" placeholder="${currentLang==='zh'?'确认密码':'Confirm'}" class="auth-input" style="display:none" minlength="6">
-        <div class="auth-error" id="authError"></div>
+        <div class="auth-error" id="authError" role="alert"></div>
         <button type="submit" class="btn btn-primary auth-btn" id="authSubmit">${currentLang==='zh'?'登录':'Sign In'}</button>
       </form>
       <p class="auth-switch">
@@ -695,6 +717,7 @@ function renderLoginPage() {
 }
 
 async function initLoginPage() {
+  if (isLoggedIn()) { routeTo('profile'); return; }
   const userEl = document.getElementById('authUser'); const passEl = document.getElementById('authPass');
   const pass2El = document.getElementById('authPass2'); const errorEl = document.getElementById('authError');
   const submitBtn = document.getElementById('authSubmit'); const switchBtn = document.getElementById('authSwitchBtn');
@@ -750,8 +773,6 @@ function renderProfilePage() {
   </div>`;
 }
 
-function initProfilePage() {}
-
 async function saveProfile() {
   const nickname = document.getElementById('profileNickname')?.value?.trim() || '';
   const bio = document.getElementById('profileBio')?.value?.trim() || '';
@@ -762,14 +783,14 @@ async function saveProfile() {
 
 async function handleLogout() { await apiLogout(); showToast(currentLang==='zh'?'已退出':'Logged out'); routeTo('timeline'); }
 
-function initTimelinePage() {}
 function initRecordPage() { window._recorder = new DreamRecorder(); }
 async function initBroadcastPage() {
   const feed = document.getElementById('broadcastFeed');
   if (!feed) return;
-  const broadcasts = await loadBroadcast();
+  const { broadcasts, online } = await loadBroadcast();
   if (broadcasts.length === 0) {
-    feed.innerHTML = `<div class="broadcast-empty-cell"><p>${t('broadcast_empty')}</p></div>`;
+    const msg = online ? t('broadcast_empty') : (currentLang === 'zh' ? '无法连接，请检查网络' : 'Cannot connect. Check your network.');
+    feed.innerHTML = `<div class="broadcast-empty-cell"><p>${msg}</p></div>`;
     return;
   }
   feed.innerHTML = broadcasts.map(item => {
@@ -778,7 +799,7 @@ async function initBroadcastPage() {
       <p class="broadcast-text">${esc(item.narrative?.slice(0, 180) || '')}</p>
       <div class="broadcast-reactions">${['○','⁕','^'].map(e => {
         const c = (item.reactions||{})[e]||0;
-        return `<button class="reaction-btn${c>0?' active':''}" onclick="reactToBroadcast('${item.id}','${e}')">${e}${c>0?`<span class="reaction-count">${c}</span>`:''}</button>`;
+        return `<button class="reaction-btn${c>0?' active':''}" onclick="reactToBroadcast('${item.id}','${e}')" aria-label="${e}${c>0?' '+c:''}">${e}${c>0?`<span class="reaction-count" aria-hidden="true">${c}</span>`:''}</button>`;
       }).join('')}</div>
     </div>`;
   }).join('');

@@ -3,7 +3,7 @@
  * Caches core assets for offline use.
  */
 
-const CACHE = 'nocturne-v3';
+const CACHE = 'nocturne-v4';
 const BASE = self.location.pathname.replace(/\/[^/]*$/, '');
 const ASSETS = [
   BASE + '/',
@@ -18,10 +18,14 @@ const ASSETS = [
   BASE + '/icon-512.svg',
 ];
 
-// Install: pre-cache all core assets
+// Install: pre-cache all core assets (individual fetch for resilience)
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE).then((cache) =>
+      Promise.allSettled(ASSETS.map((url) =>
+        cache.add(url).catch(() => {})
+      ))
+    )
   );
   self.skipWaiting();
 });

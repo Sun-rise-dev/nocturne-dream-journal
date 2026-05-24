@@ -30,15 +30,6 @@ async function apiProcessDream(rawText) {
   }
 }
 
-async function apiGetDreams() {
-  try {
-    const res = await fetch(`${API_BASE}/dreams`);
-    return await res.json();
-  } catch {
-    return { success: false, dreams: [] };
-  }
-}
-
 async function apiShareBroadcast(narrative, emotion) {
   try {
     const res = await fetch(`${API_BASE}/broadcast`, {
