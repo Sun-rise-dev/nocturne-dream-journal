@@ -7,7 +7,8 @@ const API_BASE = (() => {
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return 'http://localhost:12450/api';
   }
-  return '/api';
+  // Vercel backend — change this if you deploy elsewhere
+  return 'https://nocturne-dream-journal.vercel.app/api';
 })();
 
 function authHeaders() {

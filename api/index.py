@@ -62,10 +62,10 @@ def _require_auth(headers):
     return _sessions.get(token)
 
 def _json(data, status=200):
-    return {'statusCode': status, 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': 'https://nocturne-dream-journal.vercel.app'}, 'body': json.dumps(data, ensure_ascii=False)}
+    return {'statusCode': status, 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, 'body': json.dumps(data, ensure_ascii=False)}
 
 def _cors():
-    return {'Access-Control-Allow-Origin': 'https://nocturne-dream-journal.vercel.app', 'Access-Control-Allow-Methods': '*', 'Access-Control-Allow-Headers': '*'}
+    return {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': '*', 'Access-Control-Allow-Headers': '*'}
 
 # ── Dream Processing ──
 
