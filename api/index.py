@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import sys
+import time
 
 import requests
 import uuid
@@ -46,28 +47,75 @@ def _save():
 
 ALLOWED_EMOTIONS = {'fear', 'joy', 'calm', 'anxiety', 'wonder', 'sad', 'strange'}
 
+# ── Rate limiting ──
+_rate_limits = {}
+RATE_WINDOW = 60  # seconds
+
+def _check_rate(key, max_req=5, window=RATE_WINDOW):
+    now = time.time()
+    if key not in _rate_limits:
+        _rate_limits[key] = []
+    _rate_limits[key] = [t for t in _rate_limits[key] if now - t < window]
+    _rate_limits[key].append(now)
+    return len(_rate_limits[key]) <= max_req
+
+# ── Session expiry ──
+SESSION_TTL = 24 * 3600  # 24 hours
+_session_timestamps = {}
+
 # ── Helpers ──
 
-def _hash_pw(password, salt=None):
-    salt = salt or secrets.token_hex(8)
-    return f"{salt}:{hashlib.sha256(f'{salt}:{password}'.encode()).hexdigest()}"
+# Password hashing: PBKDF2-HMAC-SHA256 with 600,000 iterations
+_PBKDF2_ITERATIONS = 600_000
+_PBKDF2_SALT_BYTES = 16
+
+def _hash_pw(password, salt_hex=None):
+    salt_bytes = bytes.fromhex(salt_hex) if salt_hex else secrets.token_bytes(_PBKDF2_SALT_BYTES)
+    dk = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt_bytes, _PBKDF2_ITERATIONS)
+    return salt_bytes.hex() + ':' + dk.hex()
 
 def _verify_pw(password, stored):
     try:
-        salt, _ = stored.split(':', 1)
-        return _hash_pw(password, salt) == stored
+        salt_hex, _ = stored.split(':', 1)
+        return _hash_pw(password, salt_hex) == stored
     except Exception:
         return False
 
 def _require_auth(headers):
     token = headers.get('authorization', '').replace('Bearer ', '')
-    return _sessions.get(token)
+    username = _sessions.get(token)
+    if not username:
+        return None
+    # Check session expiry
+    created = _session_timestamps.get(token, 0)
+    if time.time() - created > SESSION_TTL:
+        _sessions.pop(token, None)
+        _session_timestamps.pop(token, None)
+        return None
+    # Refresh session timestamp on activity
+    _session_timestamps[token] = time.time()
+    return username
 
 def _json(data, status=200):
-    return {'statusCode': status, 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'}, 'body': json.dumps(data, ensure_ascii=False)}
+    return {
+        'statusCode': status,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://sun-rise-dev.github.io',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+        'body': json.dumps(data, ensure_ascii=False),
+    }
 
 def _cors():
-    return {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': '*', 'Access-Control-Allow-Headers': '*'}
+    return {
+        'Access-Control-Allow-Origin': 'https://sun-rise-dev.github.io',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+    }
 
 # ── Dream Processing ──
 
@@ -108,6 +156,9 @@ def _detect_emotion(text):
 
 
 def _gen_image(narrative, keywords, emotion):
+    api_key = os.environ.get('IMAGE_API_KEY', '')
+    if not api_key:
+        return None
     try:
         moods = {
             'fear': 'dark and mysterious, deep purple and blue tones',
@@ -126,12 +177,12 @@ def _gen_image(narrative, keywords, emotion):
             f"Essence: {narrative[:200]}. Aspect ratio 3:4, vertical. No text."
         )
         resp = requests.post(
-            'https://shiyunapi.com/v1/chat/completions',
+            f'{os.environ.get("IMAGE_API_BASE", "https://shiyunapi.com")}/v1/chat/completions',
             headers={
-                'Authorization': 'Bearer sk-UCeUxIpayCYEiuzpviPEay8dkMy2bsG15Ww6hHlJ1gIbnHUx',
+                'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
             },
-            json={'model': 'gemini-3.1-flash-image-preview', 'messages': [{'role': 'user', 'content': image_prompt}], 'max_tokens': 4096, 'temperature': 1.0},
+            json={'model': os.environ.get('IMAGE_MODEL', 'gemini-3.1-flash-image-preview'), 'messages': [{'role': 'user', 'content': image_prompt}], 'max_tokens': 4096, 'temperature': 1.0},
             timeout=120,
         )
         if resp.status_code == 200:
@@ -155,14 +206,32 @@ def handler(request):  # noqa: C901
 
     body_raw = request.get('body', b'')
     if isinstance(body_raw, str): body_raw = body_raw.encode()
-    try:
-        body = json.loads(body_raw) if body_raw else {}
-    except Exception:
-        body = {}
+    # Enforce max body size: 100 KB
+    if len(body_raw) > 102_400:
+        return _json({'success': False, 'error': 'Request body too large'}, 413)
+
+    content_type = headers.get('content-type', '')
+    body = {}
+    if body_raw:
+        if 'application/json' not in content_type:
+            return _json({'success': False, 'error': 'Content-Type must be application/json'}, 415)
+        try:
+            body = json.loads(body_raw)
+        except Exception:
+            return _json({'success': False, 'error': 'Invalid JSON'}, 400)
 
     # ── Health ──
     if path == '/api/health':
         return _json({'status': 'ok'})
+
+    # ── Rate limit check for sensitive routes ──
+    client_ip = request.get('remote_addr', 'unknown')
+    rate_limited_paths = ['/api/auth/register', '/api/auth/login', '/api/dreams', '/api/broadcast']
+    for rp in rate_limited_paths:
+        if path.startswith(rp):
+            if not _check_rate(f'{rp}:{client_ip}', max_req=5, window=60):
+                return _json({'success': False, 'error': 'Too many requests. Wait a moment.'}, 429)
+            break
 
     # ── Auth: Register ──
     if path == '/api/auth/register' and method == 'POST':
@@ -177,6 +246,7 @@ def handler(request):  # noqa: C901
         _users[username] = {'username': username, 'password': _hash_pw(password), 'nickname': username, 'avatar_color': '#5B6E82', 'bio': '', 'created_at': datetime.now(timezone.utc).isoformat()}
         token = secrets.token_hex(32)
         _sessions[token] = username
+        _session_timestamps[token] = time.time()
         _save()
         return _json({'success': True, 'token': token, 'user': {k: v for k, v in _users[username].items() if k != 'password'}}, 201)
 
@@ -189,6 +259,7 @@ def handler(request):  # noqa: C901
             return _json({'success': False, 'error': 'Invalid credentials'}, 401)
         token = secrets.token_hex(32)
         _sessions[token] = user_key
+        _session_timestamps[token] = time.time()
         return _json({'success': True, 'token': token, 'user': {k: v for k, v in _users[user_key].items() if k != 'password'}})
 
     # ── Auth: Profile ──
@@ -200,9 +271,9 @@ def handler(request):  # noqa: C901
             return _json({'success': True, 'user': {k: v for k, v in _users[username].items() if k != 'password'}})
         if method == 'PUT':
             if 'nickname' in body and 1 <= len(body['nickname'].strip()) <= 30:
-                _users[username]['nickname'] = body['nickname'].strip()
+                _users[username]['nickname'] = html_escape(body['nickname'].strip())
             if 'bio' in body and len(body['bio'].strip()) <= 200:
-                _users[username]['bio'] = body['bio'].strip()
+                _users[username]['bio'] = html_escape(body['bio'].strip())
             _save()
             return _json({'success': True, 'user': {k: v for k, v in _users[username].items() if k != 'password'}})
 
@@ -210,6 +281,7 @@ def handler(request):  # noqa: C901
     if path == '/api/auth/logout' and method == 'POST':
         token = headers.get('authorization', '').replace('Bearer ', '')
         _sessions.pop(token, None)
+        _session_timestamps.pop(token, None)
         return _json({'success': True})
 
     # ── Dreams ──
@@ -242,9 +314,11 @@ def handler(request):  # noqa: C901
     m = re.match(r'/api/broadcast/([^/]+)/react', path)
     if m and method == 'POST':
         bid = m.group(1)
+        if not _check_rate(f'react:{client_ip}', max_req=10, window=30):
+            return _json({'success': False, 'error': 'Too many reactions. Slow down.'}, 429)
         emoji = (body.get('emoji') or '').strip()
-        if not emoji or len(emoji) > 4:
-            return _json({'success': False, 'error': 'Invalid'}, 400)
+        if not emoji or len(emoji) > 8:
+            return _json({'success': False, 'error': 'Invalid emoji'}, 400)
         for item in _broadcasts:
             if item['id'] == bid:
                 item['reactions'][emoji] = item['reactions'].get(emoji, 0) + 1

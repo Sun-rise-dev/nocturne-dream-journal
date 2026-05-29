@@ -28,7 +28,7 @@
   --text-body: rgba(225, 220, 210, 0.90);
   --text-soft: rgba(210, 200, 185, 0.65);
   --text-dim: rgba(210, 200, 185, 0.72);
-  --text-faint: rgba(205, 195, 180, 0.58);
+  --text-faint: rgba(205, 195, 180, 0.65);
 
   --font-display: 'Cormorant Garamond', 'Georgia', 'Times New Roman', serif;
   --font-body: 'Georgia', 'Times New Roman', 'Noto Serif SC', serif;
@@ -240,7 +240,7 @@ html, body {
 
 .btn:hover { border-color: var(--gold-soft); color: var(--text-body); }
 
-.btn:active { background: var(--gold-dim); }
+.btn:active { background: var(--gold-dim); transform: scale(0.97); }
 
 .btn-primary {
   border-color: var(--gold-soft);
@@ -442,6 +442,7 @@ html, body {
 }
 
 .stat-cell:hover { background: var(--light-pool-hover); border-color: var(--card-border-hover); }
+.stat-cell:active { transform: scale(0.97); transition: transform 0.1s ease; }
 
 .stat-value {
   font-family: var(--font-display);
@@ -505,13 +506,19 @@ html, body {
 }
 
 .dream-cell-thumb {
-  width: 48px; height: 48px; border-radius: 8px;
+  width: 56px; height: 56px; border-radius: 10px;
   overflow: hidden; flex-shrink: 0;
   background: var(--surface);
+  transition: transform 0.4s ease;
 }
 
 .dream-cell-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.8s; }
 .dream-cell:hover .dream-cell-thumb img { transform: scale(1.08); }
+
+.dream-cell:active {
+  transform: scale(0.985);
+  transition: transform 0.1s ease;
+}
 
 .dream-cell-thumb-placeholder {
   width: 100%; height: 100%;
@@ -528,8 +535,17 @@ html, body {
 }
 
 .dream-cell-meta {
-  font-size: 11px; color: var(--text-dim);
+  font-size: 12px; color: var(--text-soft);
   font-family: var(--font-mono);
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+}
+.dream-cell-meta .emotion-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--gold-dim);
+  border: 1px solid var(--card-border);
+  font-size: 11px;
 }
 
 .dream-cell-chevron { color: var(--text-faint); flex-shrink: 0; }
@@ -649,6 +665,18 @@ html, body {
 
 .transcript-interim { color: var(--text-dim); }
 
+.record-transcript[contenteditable="true"] {
+  border-color: var(--gold-soft);
+  cursor: text;
+  box-shadow: inset 0 0 0 1px var(--gold-dim);
+  transition: border-color 0.4s, box-shadow 0.4s;
+}
+.record-transcript[contenteditable="true"]:focus {
+  border-color: var(--gold-mid);
+  box-shadow: inset 0 0 0 1px rgba(220,205,175,0.2), 0 0 12px var(--gold-dim);
+  outline: none;
+}
+
 .record-actions { display: flex; gap: 10px; animation: emergeSlow 0.5s ease; }
 
 /* Processing */
@@ -758,6 +786,26 @@ html, body {
 .broadcast-empty-cell {
   text-align: center; padding: 50px 20px;
   color: var(--text-dim); font-size: 14px;
+}
+
+/* Skeleton loading for broadcast */
+.skeleton-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  padding: 18px; margin-bottom: 10px;
+  animation: skeletonPulse 2s ease-in-out infinite;
+}
+.skeleton-line {
+  height: 12px; border-radius: 6px;
+  background: var(--surface);
+  margin-bottom: 10px;
+}
+.skeleton-line:last-child { margin-bottom: 0; width: 60%; }
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.8; }
 }
 
 .broadcast-card { padding: 16px; }
@@ -968,9 +1016,73 @@ html, body {
   clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
+/* ============================================
+   ROUTE TRANSITIONS — spatial direction
+   ============================================ */
+
+.main-forward {
+  animation: routeForward 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.main-back {
+  animation: routeBack 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.main-fade {
+  animation: routeFade 0.18s ease;
+}
+
+@keyframes routeForward {
+  from { opacity: 0; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes routeBack {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes routeFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ============================================
+   DREAM LIST — staggered entrance
+   ============================================ */
+
+.dream-cell {
+  opacity: 0;
+  animation: dreamRise 0.45s ease forwards;
+}
+.dream-cell:nth-child( 1) { animation-delay: 0.03s; }
+.dream-cell:nth-child( 2) { animation-delay: 0.07s; }
+.dream-cell:nth-child( 3) { animation-delay: 0.11s; }
+.dream-cell:nth-child( 4) { animation-delay: 0.15s; }
+.dream-cell:nth-child( 5) { animation-delay: 0.19s; }
+.dream-cell:nth-child( 6) { animation-delay: 0.23s; }
+.dream-cell:nth-child( 7) { animation-delay: 0.27s; }
+.dream-cell:nth-child( 8) { animation-delay: 0.31s; }
+.dream-cell:nth-child( 9) { animation-delay: 0.35s; }
+.dream-cell:nth-child(10) { animation-delay: 0.39s; }
+.dream-cell:nth-child(11) { animation-delay: 0.43s; }
+.dream-cell:nth-child(12) { animation-delay: 0.47s; }
+.dream-cell:nth-child(13) { animation-delay: 0.51s; }
+.dream-cell:nth-child(14) { animation-delay: 0.55s; }
+.dream-cell:nth-child(15) { animation-delay: 0.59s; }
+.dream-cell:nth-child(16) { animation-delay: 0.63s; }
+.dream-cell:nth-child(17) { animation-delay: 0.67s; }
+.dream-cell:nth-child(18) { animation-delay: 0.71s; }
+.dream-cell:nth-child(19) { animation-delay: 0.75s; }
+.dream-cell:nth-child(20) { animation-delay: 0.79s; }
+
+@keyframes dreamRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+  .dream-cell { opacity: 1; animation: none; }
+  .main-forward, .main-back, .main-fade { animation: none; opacity: 1; }
+  .skeleton-card { animation: none; opacity: 0.6; }
 }

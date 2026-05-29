@@ -68,3 +68,29 @@ async function reactToDreamDB(broadcastId, emoji) {
 async function reactToDream(broadcastId, emoji) {
   return reactToDreamDB(broadcastId, emoji);
 }
+
+// ═══════════════════════ Native Share API ═══════════════════════
+
+async function nativeShareDream(id) {
+  const dream = await findDream(id);
+  if (!dream) return;
+
+  const title = dream.title || dream.narrative?.slice(0, 50) || (currentLang === 'zh' ? '一个梦' : 'A dream');
+  const text = dream.narrative?.slice(0, 200) || dream.rawText?.slice(0, 200) || '';
+  const url = window.location.origin + window.location.pathname + '#detail&id=' + id;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title, text, url });
+    } catch (err) {
+      // User cancelled or API error — fall through to in-app share
+      if (err.name !== 'AbortError') {
+        await shareDream(id);
+        showToast(t('toast_shared'));
+      }
+    }
+  } else {
+    await shareDream(id);
+    showToast(t('toast_shared'));
+  }
+}

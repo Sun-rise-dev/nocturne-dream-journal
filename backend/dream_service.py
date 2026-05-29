@@ -3,15 +3,16 @@ Nocturne · 梦境整理服务 — AI 叙事整理 + 关键词提取 + 情绪识
 """
 import base64
 import logging
+import os
 import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Image generation config
-IMAGE_API_BASE = 'https://shiyunapi.com'
-IMAGE_API_KEY = 'sk-UCeUxIpayCYEiuzpviPEay8dkMy2bsG15Ww6hHlJ1gIbnHUx'
-IMAGE_MODEL = 'gemini-3.1-flash-image-preview'
+# Image generation config — loaded from environment variables
+IMAGE_API_BASE = os.environ.get('IMAGE_API_BASE', 'https://shiyunapi.com')
+IMAGE_API_KEY = os.environ.get('IMAGE_API_KEY', '')
+IMAGE_MODEL = os.environ.get('IMAGE_MODEL', 'gemini-3.1-flash-image-preview')
 
 
 class DreamService:
@@ -78,7 +79,10 @@ class DreamService:
         }
 
     def _generate_image(self, narrative: str, keywords: list, emotion: str) -> str | None:
-        """Generate dream illustration via image API"""
+        """Generate dream illustration via image API (server-side only)"""
+        if not IMAGE_API_KEY:
+            logger.warning("IMAGE_API_KEY not set — skipping image generation")
+            return None
         try:
             import requests
 

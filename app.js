@@ -4,10 +4,12 @@
  */
 
 const APP = { currentRoute: 'timeline' };
+const _scrollPositions = {};
 
 // ═══════════════════════ SPA Router ═══════════════════════
 
 function routeTo(path) {
+  const prev = APP.currentRoute;
   APP.currentRoute = path;
   const main = document.getElementById('mainView');
   if (!main) return;
@@ -18,22 +20,35 @@ function routeTo(path) {
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.route === path));
   updateTabLabels();
 
-  main.style.opacity = '0';
-  main.style.transition = 'opacity 0.2s ease';
+  // Determine transition direction
+  const deeperPages = ['detail', 'stats', 'record', 'broadcast'];
+  const isForward = deeperPages.includes(path) && prev === 'timeline';
+  const isBack = path === 'timeline' && deeperPages.includes(prev);
+  const isTabSwitch = ['timeline','record','broadcast'].includes(path) && ['timeline','record','broadcast'].includes(prev) && path !== prev;
+
+  main.classList.remove('main-forward', 'main-back', 'main-fade');
+  if (isForward) main.classList.add('main-forward');
+  else if (isBack) main.classList.add('main-back');
+  else main.classList.add('main-fade');
 
   setTimeout(async () => {
     switch (path) {
       case 'record': main.innerHTML = renderRecordPage(); initRecordPage(); break;
       case 'broadcast': main.innerHTML = renderBroadcastPage(); initBroadcastPage(); break;
-      case 'login': main.innerHTML = renderLoginPage(); break;
+      case 'login': main.innerHTML = renderLoginPage(); setTimeout(initLoginPage, 50); break;
       case 'profile': main.innerHTML = renderProfilePage(); break;
       default: main.innerHTML = await renderTimelinePage(); initTimelineFilters(); break;
     }
-    main.style.opacity = '1';
+    // Animation handled by CSS class — clean up after transition
+    setTimeout(() => main.classList.remove('main-forward', 'main-back', 'main-fade'), 300);
   }, 180);
 
   window.location.hash = path;
-  main.scrollTop = 0;
+  // Restore scroll position after DOM rebuild
+  const savedScroll = _scrollPositions[path];
+  if (savedScroll) {
+    requestAnimationFrame(() => { main.scrollTop = savedScroll; });
+  }
 }
 
 function updateTabLabels() {
@@ -245,19 +260,18 @@ function processDream() {
   apiProcessDream(text).then(async r => {
     clearInterval(phaseInterval);
     if (r.success) {
-      if (!r.image_url && pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
-      let image = r.image_url || await generateImage(r.narrative || text, r.keywords || _extractKeywords(text), r.emotion || 'wonder');
+      // Server handles image generation — image_url is returned if available
+      let image = r.image_url || null;
       if (image) image = await compressImage(image, 600, 0.65);
       addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null, audio: audioUrl });
       showToast(image ? t('toast_saved') : t('toast_saved_no_image'));
     } else {
-      if (pText) pText.textContent = currentLang === 'zh' ? '正在生成插图...' : 'Generating illustration...';
+      if (pText) pText.textContent = currentLang === 'zh' ? '正在本地整理...' : 'Processing locally...';
       const emotion = _detectEmotion(text);
       const keywords = _extractKeywords(text);
-      let image = await generateImage(text, keywords, emotion);
-      if (image) image = await compressImage(image, 600, 0.65);
-      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image, audio: audioUrl });
-      showToast(image ? t('toast_saved') : t('toast_saved_no_image'));
+      // No client-side image generation — API keys are never exposed to browser
+      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image: null, audio: audioUrl });
+      showToast(t('toast_saved_offline'));
     }
     setTimeout(() => routeTo('timeline'), 500);
     if (pEl) pEl.style.display = 'none';
@@ -345,8 +359,9 @@ async function renderTimelinePage() {
     <div class="stat-cell"><span class="stat-value">${Object.keys(stats.keywords).length}</span><span class="stat-label">${t('stat_symbols')}</span></div>
     <div class="stat-cell"><span class="stat-value">${em(topE?.[0]).symbol}</span><span class="stat-label">${t('stat_mood')}</span></div>
   </div>
-  <div class="timeline-filters">
-    <input type="search" id="timelineSearch" class="search-input" placeholder="${currentLang==='zh'?'搜索梦境...':'Search dreams...'}">
+  <div class="timeline-filters" role="search">
+    <label for="timelineSearch" class="visually-hidden">${currentLang==='zh'?'搜索梦境':'Search dreams'}</label>
+    <input type="search" id="timelineSearch" class="search-input" placeholder="${currentLang==='zh'?'搜索梦境...':'Search dreams...'}" aria-label="${currentLang==='zh'?'搜索梦境':'Search dreams'}">
     <div class="filter-chips">${['wonder','joy','calm','fear','anxiety','sad','strange'].map(e => `<span class="filter-chip" data-emotion="${e}">${em(e).symbol} ${em(e).label}</span>`).join('')}</div>
   </div>`;
 
@@ -359,7 +374,7 @@ async function renderTimelinePage() {
         <div class="dream-cell-thumb">${dream.image ? `<img src="${dream.image}" alt="" loading="lazy">` : `<div class="dream-cell-thumb-placeholder">${em(dream.emotion).symbol}</div>`}</div>
         <div class="dream-cell-body">
           <div class="dream-cell-title">${esc(dream.narrative?.slice(0, 50) || dream.rawText?.slice(0, 50) || '···')}</div>
-          <div class="dream-cell-meta">${em(dream.emotion).label}${dream.keywords?.length ? ' · ' + dream.keywords.slice(0,2).map(k => esc(k)).join(', ') : ''}</div>
+          <div class="dream-cell-meta"><span class="emotion-pill">${em(dream.emotion).symbol} ${em(dream.emotion).label}</span>${(dream.keywords||[]).slice(0,2).map(k => `<span class="emotion-pill">${esc(k)}</span>`).join('')}</div>
         </div>
         <span class="dream-cell-chevron"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
       </button>`;
@@ -399,9 +414,9 @@ function renderBroadcastPage() {
   const pp = user ? 'profile' : 'login';
   return `<div class="nav-bar"><div><h1 class="nav-title">Nocturne</h1><div class="nav-subtitle">${t('broadcast_subtitle')}</div></div><div style="display:flex;align-items:center;gap:8px"><button class="user-nav" onclick="routeTo('${pp}')" style="background:${color2}" aria-label="Profile">${init2}</button><button class="btn btn-tertiary" onclick="toggleLang()" style="font-size:11px;letter-spacing:1px;padding:6px 10px">${t('lang_switch')}</button></div></div>
     <div class="broadcast-feed" id="broadcastFeed">
-      <div class="dream-weaver" style="padding:40px 0;display:flex;align-items:center;justify-content:center;gap:16px">
-        <div class="weaver-dot"></div><div class="weaver-dot"></div><div class="weaver-dot"></div>
-      </div>
+      <div class="skeleton-card"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line"></div><div class="skeleton-line" style="width:70%"></div></div>
+      <div class="skeleton-card"><div class="skeleton-line" style="width:35%"></div><div class="skeleton-line" style="width:90%"></div><div class="skeleton-line" style="width:55%"></div></div>
+      <div class="skeleton-card"><div class="skeleton-line" style="width:45%"></div><div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:50%"></div></div>
     </div>`;
 }
 
@@ -432,6 +447,7 @@ async function viewDream(id) {
       <div class="detail-keywords">${dream.keywords?.map(k => `<span class="detail-keyword">${esc(k)}</span>`).join('') || ''}</div>
       <div class="detail-actions">
         <button class="btn btn-secondary" onclick="shareDream('${dream.id}')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>${t('detail_share')}</button>
+        ${navigator.share ? `<button class="btn btn-secondary" onclick="nativeShareDream('${dream.id}')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>${currentLang==='zh'?'系统分享':'Share'}</button>` : ''}
         <button class="btn btn-destructive" onclick="deleteDream('${dream.id}')">${t('detail_delete')}</button>
       </div>`;
     main.style.opacity = '1';
@@ -947,6 +963,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }).catch(() => {});
   }
 
+  // Save scroll position before navigation
+  const main = document.getElementById('mainView');
+  main.addEventListener('scroll', () => {
+    if (APP.currentRoute === 'timeline') _scrollPositions.timeline = main.scrollTop;
+  }, { passive: true });
+
   initParticles();
   updateTabLabels();
   initNavigation();
@@ -955,25 +977,76 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initSplash();
 
-  // PWA install prompt
+  // PWA install prompt — engagement-based trigger
   let deferredPrompt;
+  let _installShown = false;
+  let _engagementScore = 0;
+  const INSTALL_THRESHOLD = 3; // show after 3 engagement points
+
+  function _trackEngagement() {
+    _engagementScore++;
+    if (_engagementScore >= INSTALL_THRESHOLD && deferredPrompt && !_installShown) {
+      _showInstallBar();
+    }
+  }
+
+  // Track meaningful user engagement: recording, viewing dreams, switching tabs
+  const _origRouteTo = routeTo;
+  routeTo = function(path) {
+    if (path === 'record' || path === 'broadcast' || path === 'detail') _trackEngagement();
+    return _origRouteTo(path);
+  };
+
+  // Also track after successfully saving a dream
+  const _origAddDream = addDream;
+  addDream = function(dream) {
+    const result = _origAddDream(dream);
+    _trackEngagement();
+    return result;
+  };
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    // Show custom install prompt after 30s
-    setTimeout(() => {
-      if (deferredPrompt && !window.matchMedia('(display-mode: standalone)').matches) {
-        const installBar = document.createElement('div');
-        installBar.className = 'install-bar';
-        installBar.innerHTML = `
-          <span>${currentLang === 'zh' ? '添加到主屏幕，随时随地记录梦境' : 'Add to Home Screen for quick access'}</span>
-          <button class="btn btn-primary" style="padding:7px 14px;font-size:11px;min-height:auto">${currentLang === 'zh' ? '安装' : 'Install'}</button>
-          <button class="install-dismiss" aria-label="Dismiss">&times;</button>
-        `;
-        installBar.querySelector('.btn').onclick = () => { deferredPrompt.prompt(); deferredPrompt = null; installBar.remove(); };
-        installBar.querySelector('.install-dismiss').onclick = () => installBar.remove();
-        document.body.appendChild(installBar);
-      }
-    }, 30000);
+    // If already engaged enough, show immediately on next eligible moment
+    if (_engagementScore >= INSTALL_THRESHOLD && !_installShown) {
+      setTimeout(() => _showInstallBar(), 3000);
+    }
   });
+
+  // Fallback: show after 2 minutes if user hasn't seen it
+  setTimeout(() => {
+    if (deferredPrompt && !_installShown && document.visibilityState === 'visible') {
+      _showInstallBar();
+    }
+  }, 120000);
+
+  function _showInstallBar() {
+    if (_installShown || !deferredPrompt) return;
+    if (window.matchMedia('(display-mode: standalone)').matches) return;
+    _installShown = true;
+
+    const installBar = document.createElement('div');
+    installBar.className = 'install-bar';
+    installBar.innerHTML = `
+      <span>${currentLang === 'zh' ? '添加到主屏幕，随时随地记录梦境' : 'Add to Home Screen for quick access'}</span>
+      <button class="btn btn-primary" style="padding:7px 14px;font-size:11px;min-height:auto">${currentLang === 'zh' ? '安装' : 'Install'}</button>
+      <button class="install-dismiss" aria-label="${currentLang === 'zh' ? '关闭' : 'Dismiss'}">&times;</button>
+    `;
+    installBar.querySelector('.btn').onclick = async () => {
+      try {
+        await deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        // If user accepted, clear the prompt; otherwise allow re-prompt later
+        if (outcome === 'accepted') deferredPrompt = null;
+      } catch {}
+      installBar.remove();
+    };
+    installBar.querySelector('.install-dismiss').onclick = () => {
+      installBar.remove();
+      // Allow re-prompt after 7 days
+      setTimeout(() => { _installShown = false; }, 7 * 24 * 3600 * 1000);
+    };
+    document.body.appendChild(installBar);
+  }
 });

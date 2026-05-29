@@ -11,12 +11,9 @@ const API_BASE = (() => {
   return 'https://nocturne-dream-journal.vercel.app/api';
 })();
 
-// ═══════════════════════ Client-side Image Generation ═══════════════════════
-// Bypasses blocked Vercel — calls shiyunapi.com directly from browser
-
-const IMAGE_API = 'https://shiyunapi.com/v1/chat/completions';
-const IMAGE_KEY = 'sk-UCeUxIpayCYEiuzpviPEay8dkMy2bsG15Ww6hHlJ1gIbnHUx';
-const IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+// ═══════════════════════ Image Generation ═══════════════════════
+// Image generation is handled server-side only.
+// API keys are never exposed to the client.
 
 const EMOTION_MOODS = {
   fear: 'dark and mysterious atmosphere, deep purple and blue tones',
@@ -53,49 +50,6 @@ function _extractKeywords(text) {
   const freq = {};
   words.forEach(w => { freq[w] = (freq[w] || 0) + 1; });
   return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 8).map(e => e[0]);
-}
-
-async function generateImage(narrative, keywords, emotion) {
-  try {
-    const mood = EMOTION_MOODS[emotion] || 'dreamlike and ethereal';
-    const prompt = [
-      'Create a dreamlike illustration for a dream.',
-      `Atmosphere: ${mood}.`,
-      'Style: soft watercolor meets oil painting, misty edges, luminous quality.',
-      `Key elements from the dream: ${keywords.slice(0, 5).join(', ') || 'surreal landscape'}.`,
-      `Dream narrative essence: ${narrative.slice(0, 200)}.`,
-      'Aspect ratio 3:4, vertical composition. No text, no borders.',
-    ].join(' ');
-
-    const resp = await fetch(IMAGE_API, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${IMAGE_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: IMAGE_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 4096,
-        temperature: 1.0,
-      }),
-    });
-
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const content = data?.choices?.[0]?.message?.content || '';
-
-    // Parse markdown image URL (http or data: URIs)
-    const mdMatch = content.match(/!\[.*?\]\(((?:https?|data):[^\s)]+)\)/);
-    if (mdMatch) return mdMatch[1];
-
-    // Parse bare base64
-    if (content.startsWith('data:image')) return content;
-
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 function authHeaders() {

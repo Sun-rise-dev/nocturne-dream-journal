@@ -28,6 +28,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1 MB
 
+_last_session_cleanup = 0
+
+@app.before_request
+def _periodic_session_cleanup():
+    """Clean expired sessions every 5 minutes."""
+    global _last_session_cleanup
+    now = datetime.now(timezone.utc).timestamp()
+    if now - _last_session_cleanup > 300:
+        _clean_expired_sessions()
+        _last_session_cleanup = now
+
+
 CORS(app, origins=[
     'http://localhost:12450',
     'http://127.0.0.1:12450',
@@ -42,7 +54,17 @@ ALLOWED_AVATAR_COLORS = ['#3A4A5C','#5B6E82','#8B7D6B','#6B3A5C','#2A4A3C','#4A3
 _rate_limits = {}
 BROADCAST_FILE = Path.cwd() / 'broadcast.json'
 USERS_FILE = Path.cwd() / 'users.json'
+SESSION_TTL = 24 * 3600  # 24 hours
 SESSIONS = {}
+_session_timestamps = {}
+
+def _clean_expired_sessions():
+    """Remove expired sessions."""
+    now = datetime.now(timezone.utc).timestamp()
+    expired = [t for t, ts in _session_timestamps.items() if now - ts > SESSION_TTL]
+    for t in expired:
+        SESSIONS.pop(t, None)
+        _session_timestamps.pop(t, None)
 
 
 def _load_broadcasts():
@@ -85,16 +107,28 @@ def _save_users(data):
     except Exception as e: logger.error(f"Failed to save users: {e}"); raise
 
 
+# Password hashing: PBKDF2-HMAC-SHA256 with 600,000 iterations
+_PBKDF2_ITERATIONS = 600_000
+_PBKDF2_SALT_BYTES = 16  # 128-bit salt
+_PBKDF2_HASH_NAME = 'sha256'
+
 def _hash_pw(password, salt=None):
-    salt = salt or secrets.token_hex(8)
-    h = hashlib.sha256(f"{salt}:{password}".encode()).hexdigest()
-    return f"{salt}:{h}"
+    """Hash password with PBKDF2-HMAC-SHA256."""
+    salt_bytes = bytes.fromhex(salt) if salt else secrets.token_bytes(_PBKDF2_SALT_BYTES)
+    dk = hashlib.pbkdf2_hmac(
+        _PBKDF2_HASH_NAME,
+        password.encode('utf-8'),
+        salt_bytes,
+        _PBKDF2_ITERATIONS,
+    )
+    return salt_bytes.hex() + ':' + dk.hex()
 
 
 def _verify_pw(password, stored):
+    """Verify password against PBKDF2 hash."""
     try:
-        salt, _ = stored.split(':', 1)
-        return _hash_pw(password, salt) == stored
+        salt_hex, _ = stored.split(':', 1)
+        return _hash_pw(password, salt_hex) == stored
     except Exception:
         return False
 
@@ -105,6 +139,15 @@ def _require_auth(f):
         token = request.headers.get('Authorization', '').replace('Bearer ', '')
         if not token or token not in SESSIONS:
             return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        # Check session expiry
+        created = _session_timestamps.get(token, 0)
+        now_ts = datetime.now(timezone.utc).timestamp()
+        if now_ts - created > SESSION_TTL:
+            SESSIONS.pop(token, None)
+            _session_timestamps.pop(token, None)
+            return jsonify({'success': False, 'error': 'Session expired'}), 401
+        # Refresh session timestamp
+        _session_timestamps[token] = now_ts
         g.user_id = SESSIONS[token]
         return f(*args, **kwargs)
     return wrapper
@@ -143,6 +186,7 @@ def register():
 
     token = secrets.token_hex(32)
     SESSIONS[token] = username
+    _session_timestamps[token] = datetime.now(timezone.utc).timestamp()
     logger.info(f"User registered: {username}")
 
     return jsonify({'success': True, 'token': token, 'user': _public_user(users[username])}), 201
@@ -169,6 +213,7 @@ def login():
 
     token = secrets.token_hex(32)
     SESSIONS[token] = user[0]
+    _session_timestamps[token] = datetime.now(timezone.utc).timestamp()
     logger.info(f"User logged in: {user[0]}")
 
     return jsonify({'success': True, 'token': token, 'user': _public_user(user[1])})
@@ -186,9 +231,12 @@ def profile():
         return jsonify({'success': True, 'user': _public_user(users[username])})
 
     # PUT — update profile
+    if not request.is_json:
+        return jsonify({'success': False, 'error': 'JSON required'}), 400
+
     data = request.get_json()
-    nickname = (data.get('nickname') or '').strip()
-    bio = (data.get('bio') or '').strip()
+    nickname = html_escape((data.get('nickname') or '').strip())
+    bio = html_escape((data.get('bio') or '').strip())
 
     if nickname and 1 <= len(nickname) <= 30:
         users[username]['nickname'] = nickname
@@ -204,6 +252,7 @@ def profile():
 def logout():
     token = request.headers.get('Authorization', '').replace('Bearer ', '')
     SESSIONS.pop(token, None)
+    _session_timestamps.pop(token, None)
     return jsonify({'success': True})
 
 
@@ -237,7 +286,7 @@ def process_dream():
     if len(text) > 10000:
         return jsonify({'success': False, 'error': 'Text too long'}), 413
 
-    logger.info(f"Processing dream: {text[:50]}...")
+    logger.info(f"Processing dream ({len(text)} chars)")
     result = dream_service.process(text)
     return jsonify(result)
 
@@ -252,6 +301,13 @@ def health():
 @app.route('/api/broadcast', methods=['POST'])
 def share_broadcast():
     """匿名分享梦境到广播频道"""
+    client_ip = request.remote_addr or 'unknown'
+    if not _check_rate(f'broadcast:{client_ip}', max_req=5, window=60):
+        return jsonify({'success': False, 'error': 'Too many requests. Wait a moment.'}), 429
+
+    if not request.is_json:
+        return jsonify({'success': False, 'error': 'JSON required'}), 400
+
     data = request.get_json()
     narrative = (data.get('narrative') or '').strip()
     emotion = data.get('emotion', 'wonder')
@@ -288,9 +344,17 @@ def list_broadcasts():
 @app.route('/api/broadcast/<broadcast_id>/react', methods=['POST'])
 def react_broadcast(broadcast_id):
     """添加表情反应"""
+    client_ip = request.remote_addr or 'unknown'
+    if not _check_rate(f'react:{client_ip}', max_req=10, window=30):
+        return jsonify({'success': False, 'error': 'Too many reactions. Slow down.'}), 429
+
+    if not request.is_json:
+        return jsonify({'success': False, 'error': 'JSON required'}), 400
+
     data = request.get_json()
     emoji = (data.get('emoji') or '').strip()
-    if not emoji or len(emoji) > 4:
+    # Allow common emoji characters (single chars, ZWJ sequences, or short ASCII emoticons)
+    if not emoji or len(emoji) > 8:
         return jsonify({'success': False, 'error': 'Invalid emoji'}), 400
 
     broadcasts = _load_broadcasts()
@@ -301,6 +365,16 @@ def react_broadcast(broadcast_id):
             return jsonify({'success': True, 'count': item['reactions'][emoji]})
 
     return jsonify({'success': False, 'error': 'Not found'}), 404
+
+
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses."""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['X-XSS-Protection'] = '0'  # Deprecated, CSP is preferred
+    return response
 
 
 if __name__ == '__main__':

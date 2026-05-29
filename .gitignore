@@ -1,9 +1,39 @@
 __pycache__/
 *.pyc
 .env
+.env.local
+.env.production
+*.local
 text_providers.yaml
 image_providers.yaml
 history/
 output/
 .DS_Store
 Thumbs.db
+
+# Sensitive data files — NEVER commit
+users.json
+broadcast.json
+*.key
+*.pem
+*.crt
+secrets.*
+credentials.*
+*_secret*
+*_secret*.*
+
+# Dependencies
+node_modules/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

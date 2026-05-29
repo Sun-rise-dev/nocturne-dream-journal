@@ -96,7 +96,7 @@ async function migrateIfNeeded() {
         }
         if (migrated > 0) {
           localStorage.removeItem('nocturne-dreams');
-          console.log(`Migrated ${migrated} dreams to IndexedDB`);
+          // Migration complete — data moved from localStorage to IndexedDB
         }
       }
     }

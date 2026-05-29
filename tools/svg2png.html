@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nocturne Icon — SVG → PNG</title>
+<style>
+  body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 20px; background: #111; color: #ddd; }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p { color: #999; font-size: 14px; margin-bottom: 24px; }
+  canvas { border-radius: 20px; box-shadow: 0 4px 30px rgba(0,0,0,.5); display: block; margin: 16px 0; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  button {
+    padding: 10px 20px; border: 1px solid #555; border-radius: 8px;
+    background: #222; color: #ddd; cursor: pointer; font-size: 14px;
+  }
+  button:hover { background: #333; border-color: #888; }
+  button.primary { background: #C4A870; border-color: #C4A870; color: #111; font-weight: 600; }
+  button.primary:hover { background: #D4B880; }
+  label { font-size: 13px; color: #999; display: block; margin: 6px 0 2px; }
+  .info { font-size: 12px; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>Nocturne · 图标转换器</h1>
+<p>将 SVG 图标导出为 PNG，用于 PWA manifest 和 iOS 适配</p>
+
+<canvas id="c" width="512" height="512"></canvas>
+
+<div class="row">
+  <button class="primary" onclick="downloadPNG(512, 'icon-512.png')">下载 icon-512.png</button>
+  <button onclick="downloadPNG(192, 'icon-192.png')">下载 icon-192.png</button>
+  <button onclick="downloadPNG(512, 'icon-maskable.png', true)">下载 icon-maskable.png</button>
+</div>
+
+<label for="svgInput">或者拖入你自己的 SVG：</label>
+<input type="file" id="svgInput" accept=".svg" style="margin-top:4px">
+<p class="info">默认加载 icon-512.svg。生成的 PNG 直接保存到项目根目录即可。</p>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+// Load default SVG
+fetch('../icon-512.svg')
+  .then(r => r.text())
+  .then(svg => renderSVG(svg))
+  .catch(() => console.warn('Default SVG not found, use file input'));
+
+document.getElementById('svgInput').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => renderSVG(reader.result);
+  reader.readAsText(file);
+});
+
+function renderSVG(svgText) {
+  const img = new Image();
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    canvas.width = 512;
+    canvas.height = 512;
+    ctx.clearRect(0, 0, 512, 512);
+    ctx.drawImage(img, 0, 0, 512, 512);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function downloadPNG(size, filename, maskable) {
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = size;
+  tempCanvas.height = size;
+  const tctx = tempCanvas.getContext('2d');
+
+  if (maskable) {
+    // For maskable: draw icon centered with 25% safe-zone padding
+    const iconSize = size * 0.75;
+    const offset = size * 0.125;
+    tctx.drawImage(canvas, 0, 0, 512, 512, offset, offset, iconSize, iconSize);
+  } else {
+    tctx.drawImage(canvas, 0, 0, 512, 512, 0, 0, size, size);
+  }
+
+  tempCanvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, 'image/png');
+}
+</script>
+</body>
+</html>
