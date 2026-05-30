@@ -150,19 +150,75 @@ class DreamService:
 
     def _detect_emotion(self, text: str) -> str:
         patterns = {
-            'fear': ['害怕', '恐惧', '逃跑', '黑暗', '追赶', '坠落', '死亡', '血'],
-            'joy': ['开心', '笑', '美', '幸福', '温暖', '爱', '光明', '彩虹'],
-            'calm': ['安静', '水', '湖', '海', '风', '云', '月', '星星', '花'],
-            'anxiety': ['考试', '迟到', '找', '迷路', '丢', '忘', '急', '错'],
-            'wonder': ['飞', '魔法', '变', '穿越', '巨大', '奇怪', '宇宙', '光'],
-            'sad': ['哭', '难过', '失去', '离别', '死', '老', '病', '泪'],
-            'strange': ['扭曲', '颠倒', '动物', '说话', '变成', '平行', '无限'],
+            'fear': [
+                '害怕', '恐惧', '逃跑', '黑暗', '追赶', '坠落', '死亡', '血', '鬼', '怪物',
+                '噩梦', '吓', '恐怖', '尖叫', '逃', '躲', '黑', '巷', '深渊', '窒息',
+                '棺材', '僵尸', '墓地', '骷髅', '蛇', '蜘蛛', '封闭', '困', '陷阱', '淹没',
+                'afraid', 'fear', 'scared', 'terrified', 'monster', 'dark', 'chase',
+                'falling', 'death', 'nightmare', 'horror', 'ghost', 'scream', 'run',
+                'hide', 'trapped', 'drowning', 'shadow', 'evil', 'demon',
+            ],
+            'joy': [
+                '开心', '笑', '美', '幸福', '温暖', '爱', '光明', '彩虹', '拥抱', '礼物',
+                '庆祝', '鲜花', '甜', '阳光', '婚礼', '孩子', '团聚', '成功', '胜利', '拥抱',
+                'happy', 'love', 'light', 'warm', 'beautiful', 'joy', 'smile', 'laugh',
+                'celebration', 'sun', 'flower', 'gift', 'hug', 'peace', 'heaven',
+            ],
+            'calm': [
+                '安静', '水', '湖', '海', '风', '云', '月', '星星', '花', '雪', '山', '林',
+                '田野', '草原', '日落', '黄昏', '晨曦', '微光', '宁静', '安详', '缓慢', '漂浮',
+                '河', '溪', '清晨', '寺庙', '冥想', '呼吸', '静', '躺', '散步',
+                'calm', 'water', 'lake', 'ocean', 'wind', 'moon', 'star', 'quiet',
+                'peaceful', 'slow', 'float', 'forest', 'river', 'sunset', 'snow',
+                'meditation', 'zen', 'gentle', 'breeze',
+            ],
+            'anxiety': [
+                '考试', '迟到', '找', '迷路', '丢', '忘', '急', '错', '裸体', '没准备',
+                '赶不上', '错过', '晚点', '空', '独自', '等待', '反复', '重复', '拥挤',
+                '电梯', '楼梯', '断', '碎', '烂', '坏', '紧张', '担心', '焦虑', '慌',
+                'exam', 'late', 'lost', 'forgot', 'anxious', 'naked', 'unprepared',
+                'missed', 'wait', 'repeat', 'stuck', 'broken', 'rush', 'hurry',
+                'embarrassed', 'shame', 'failure', 'test', 'nervous', 'worried',
+            ],
+            'wonder': [
+                '飞', '魔法', '变', '穿越', '巨大', '奇怪', '宇宙', '光', '翅膀', '神奇',
+                '异世界', '幻想', '星辰', '银河', '龙', '精灵', '宫殿', '仙境', '不可思议',
+                '奇迹', '瑰丽', '灿烂', '绚丽', '神奇', '展现', '翱翔', '升腾',
+                'fly', 'magic', 'transform', 'cosmic', 'giant', 'wonder', 'fantasy',
+                'dragon', 'fairy', 'castle', 'portal', 'galaxy', 'wings', 'miraculous',
+                'enchanted', 'mystical', 'ethereal', 'divine', 'celestial', 'spell',
+            ],
+            'sad': [
+                '哭', '难过', '失去', '离别', '死', '老', '病', '泪', '悲伤', '孤独',
+                '寂寞', '哀伤', '痛苦', '心碎', '分手', '离婚', '葬礼', '坟墓', '遗憾',
+                '怀念', '回不去', '再也', '没有', '想', '念', '无奈', '叹息',
+                'cry', 'sad', 'loss', 'goodbye', 'sorrow', 'lonely', 'alone', 'grief',
+                'pain', 'heartbreak', 'tears', 'funeral', 'grave', 'miss', 'regret',
+                'empty', 'cold', 'rain', 'grey', 'gray',
+            ],
+            'strange': [
+                '扭曲', '颠倒', '动物', '说话', '变成', '平行', '无限', '超现实', '荒诞',
+                '错位', '拼接', '融化', '变形', '分身', '时间', '循环', '悖论', '混乱',
+                '碎片', '重叠', '不真实', '诡异', '异样', '多重', '人格', '梦中梦',
+                'surreal', 'twisted', 'animal', 'talking', 'strange', 'bizarre',
+                'weird', 'absurd', 'melt', 'shift', 'morph', 'parallel', 'loop',
+                'distort', 'warp', 'fragment', 'double', 'clone', 'impossible',
+            ],
         }
         scores = {}
         for emotion, words in patterns.items():
             scores[emotion] = sum(text.count(w) for w in words)
-        best = max(scores, key=scores.get)
-        return best if scores[best] > 0 else 'wonder'
+        # Sort by score; if top two are tied, pick randomly among tied ones
+        sorted_pairs = sorted(scores.items(), key=lambda x: -x[1])
+        best_score = sorted_pairs[0][1]
+        if best_score > 0:
+            # If multiple emotions share the top score, pick one at random
+            tied = [e for e, s in sorted_pairs if s == best_score]
+            import random
+            return random.choice(tied)
+        # No keywords matched → pick a random emotion (not just 'wonder' every time)
+        import random
+        return random.choice(list(patterns.keys()))
 
     def _extract_keywords(self, text: str) -> list:
         stop = {'的','了','是','我','在','有','和','就','不','人','都','一','个',

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Nocturne · 夜曲
  * iOS-native dream journal. Bilingual (zh/en).
  */
@@ -233,6 +233,113 @@ class DreamRecorder {
   }
 }
 
+// ═══════════════════════ Dream Image Generator (Client-side Fallback) ═══════════════════════
+
+/**
+ * Generate a unique abstract dream illustration using Canvas.
+ * Used as fallback when the server-side image API is unavailable.
+ * Each emotion has a distinct color palette; the image varies with dream content.
+ */
+function generateDreamImage(emotion, keywords, narrative) {
+  const W = 600, H = 800;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  // ── Color palettes per emotion ──
+  const palettes = {
+    fear:    { bg: ['#0a0010','#0d0018','#120525'], accent: ['#4a2080','#6b30b0','#3a1060','#8b50c0'], glow: 'rgba(100,40,180,0.3)' },
+    joy:     { bg: ['#1a0a00','#2a1500','#1a0500'], accent: ['#f0a040','#e08030','#ffcc60','#f09050'], glow: 'rgba(255,180,60,0.3)' },
+    calm:    { bg: ['#00101a','#001520','#000a12'], accent: ['#3080a0','#50a0c0','#206080','#70c0e0'], glow: 'rgba(60,160,200,0.25)' },
+    anxiety: { bg: ['#100010','#180818','#0a000a'], accent: ['#9050a0','#b05080','#804080','#c070a0'], glow: 'rgba(150,60,120,0.25)' },
+    wonder:  { bg: ['#000818','#000d24','#010520'], accent: ['#c0a040','#e0c060','#a0d0e0','#d0a050'], glow: 'rgba(200,180,80,0.28)' },
+    sad:     { bg: ['#0a0a12','#0e0e18','#080810'], accent: ['#506080','#607090','#405070','#7080a0'], glow: 'rgba(80,100,150,0.2)' },
+    strange: { bg: ['#080a10','#0c0e18','#06080c'], accent: ['#40a080','#60c0a0','#a04080','#c060a0'], glow: 'rgba(80,160,120,0.25)' },
+  };
+  const pal = palettes[emotion] || palettes.wonder;
+
+  // ── Deterministic seed from dream content (not Math.random) ──
+  const seedStr = (narrative || '') + (keywords || []).join('');
+  let seed = 0;
+  for (let i = 0; i < seedStr.length; i++) seed = ((seed << 5) - seed + seedStr.charCodeAt(i)) | 0;
+  function rng() { seed = (seed * 1664525 + 1013904223) | 0; return (seed >>> 0) / 4294967296; }
+
+  // ── Background gradient ──
+  const bgGrad = ctx.createLinearGradient(0, 0, W * 0.7, H);
+  bgGrad.addColorStop(0, pal.bg[Math.floor(rng() * pal.bg.length)]);
+  bgGrad.addColorStop(0.5, pal.bg[Math.floor(rng() * pal.bg.length)]);
+  bgGrad.addColorStop(1, pal.bg[Math.floor(rng() * pal.bg.length)]);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Soft radial glows ──
+  for (let i = 0; i < 3; i++) {
+    const x = W * (0.2 + rng() * 0.6), y = H * (0.15 + rng() * 0.5);
+    const r = 80 + rng() * 220;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, pal.glow);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ── Abstract floating orbs (dream fragments) ──
+  const orbCount = 5 + Math.floor(rng() * 8);
+  for (let i = 0; i < orbCount; i++) {
+    const x = W * (0.1 + rng() * 0.8), y = H * (0.1 + rng() * 0.7);
+    const r = 15 + rng() * 60;
+    const alpha = 0.08 + rng() * 0.18;
+    const c = pal.accent[Math.floor(rng() * pal.accent.length)];
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, c + Math.floor(alpha * 255).toString(16).padStart(2,'0'));
+    grad.addColorStop(0.6, c + '10');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ── Particles / tiny stars ──
+  const particleCount = 30 + Math.floor(rng() * 50);
+  for (let i = 0; i < particleCount; i++) {
+    const x = W * (0.05 + rng() * 0.9), y = H * (0.05 + rng() * 0.85);
+    const r = 0.5 + rng() * 2.5;
+    const alpha = 0.15 + rng() * 0.55;
+    ctx.fillStyle = pal.accent[Math.floor(rng() * pal.accent.length)] + Math.floor(alpha * 255).toString(16).padStart(2,'0');
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // ── Soft horizontal bands (like water/mist) ──
+  const bandCount = 3 + Math.floor(rng() * 4);
+  for (let i = 0; i < bandCount; i++) {
+    const y = H * (0.55 + rng() * 0.4);
+    const bandGrad = ctx.createLinearGradient(0, y - 30, 0, y + 30);
+    const c = pal.accent[Math.floor(rng() * pal.accent.length)];
+    bandGrad.addColorStop(0, 'transparent');
+    bandGrad.addColorStop(0.5, c + '15');
+    bandGrad.addColorStop(1, 'transparent');
+    ctx.fillStyle = bandGrad;
+    ctx.fillRect(0, y - 30, W, 60);
+  }
+
+  // ── Central focal shape ──
+  const cx = W * (0.35 + rng() * 0.3), cy = H * (0.25 + rng() * 0.25);
+  const focalGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 160 + rng() * 120);
+  focalGrad.addColorStop(0, pal.accent[0] + '30');
+  focalGrad.addColorStop(0.4, pal.accent[1] + '15');
+  focalGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = focalGrad;
+  ctx.beginPath(); ctx.arc(cx, cy, 160 + rng() * 120, 0, Math.PI * 2); ctx.fill();
+
+  // ── Subtle vignette ──
+  const vignette = ctx.createRadialGradient(W/2, H/2, H * 0.4, W/2, H/2, H * 0.8);
+  vignette.addColorStop(0, 'transparent');
+  vignette.addColorStop(1, 'rgba(0,0,0,0.4)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+
+  return canvas.toDataURL('image/jpeg', 0.7);
+}
+
 // ═══════════════════════ Dream Processing ═══════════════════════
 
 function processDream() {
@@ -260,17 +367,20 @@ function processDream() {
   apiProcessDream(text).then(async r => {
     clearInterval(phaseInterval);
     if (r.success) {
-      // Server handles image generation — image_url is returned if available
       let image = r.image_url || null;
-      if (image) image = await compressImage(image, 600, 0.65);
+      if (image) {
+        image = await compressImage(image, 600, 0.65);
+      } else {
+        image = generateDreamImage(r.emotion || 'wonder', r.keywords || [], r.narrative);
+      }
       addDream({ rawText: text, narrative: r.narrative, emotion: r.emotion || 'wonder', keywords: r.keywords || [], image, title: r.title || null, audio: audioUrl });
-      showToast(image ? t('toast_saved') : t('toast_saved_no_image'));
+      showToast(t('toast_saved'));
     } else {
-      if (pText) pText.textContent = currentLang === 'zh' ? '正在本地整理...' : 'Processing locally...';
+      if (pText) pText.textContent = currentLang === 'zh' ? '正在本地描绘...' : 'Painting dreamscape...';
       const emotion = _detectEmotion(text);
       const keywords = _extractKeywords(text);
-      // No client-side image generation — API keys are never exposed to browser
-      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image: null, audio: audioUrl });
+      const image = generateDreamImage(emotion, keywords, text);
+      addDream({ rawText: text, narrative: text, emotion, keywords, title: text.slice(0, 28), image, audio: audioUrl });
       showToast(t('toast_saved_offline'));
     }
     setTimeout(() => routeTo('timeline'), 500);

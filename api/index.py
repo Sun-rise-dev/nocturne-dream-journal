@@ -145,14 +145,23 @@ def _process_dream(text):
 
 def _detect_emotion(text):
     patterns = {
-        'fear': ['害怕','恐惧','逃跑','黑暗','追赶','坠落'], 'joy': ['开心','笑','美','幸福','温暖'],
-        'calm': ['安静','水','湖','海','风','云','月','星星'], 'anxiety': ['考试','迟到','找','迷路','急'],
-        'wonder': ['飞','魔法','变','穿越','巨大','奇怪','宇宙'], 'sad': ['哭','难过','失去','离别'],
-        'strange': ['扭曲','颠倒','动物','说话','变成'],
+        'fear': ['害怕','恐惧','逃跑','黑暗','追赶','坠落','死亡','血','鬼','怪物','噩梦','吓','恐怖','尖叫','逃','躲','深渊','窒息','afraid','fear','scared','monster','dark','chase','falling','death','nightmare','horror','ghost','scream'],
+        'joy': ['开心','笑','美','幸福','温暖','爱','光明','彩虹','拥抱','庆祝','鲜花','阳光','婚礼','团聚','成功','happy','love','light','warm','beautiful','joy','smile','laugh'],
+        'calm': ['安静','水','湖','海','风','云','月','星星','花','雪','山','林','草原','日落','宁静','安详','漂浮','calm','water','lake','ocean','wind','moon','star','quiet','peaceful','forest','sunset'],
+        'anxiety': ['考试','迟到','找','迷路','丢','忘','急','错','没准备','赶不上','错过','等待','紧张','担心','焦虑','exam','late','lost','forgot','anxious','naked','stuck','rush','nervous'],
+        'wonder': ['飞','魔法','变','穿越','巨大','奇怪','宇宙','光','翅膀','神奇','幻想','星辰','银河','龙','精灵','仙境','fly','magic','cosmic','giant','wonder','fantasy','dragon','fairy','castle','portal'],
+        'sad': ['哭','难过','失去','离别','死','老','病','泪','悲伤','孤独','寂寞','哀伤','痛苦','心碎','分手','遗��','怀念','cry','sad','loss','goodbye','sorrow','lonely','grief','tears','regret'],
+        'strange': ['扭曲','颠倒','动物','说话','变成','平行','无限','超现实','荒诞','错位','融化','变形','分身','循环','混乱','surreal','twisted','animal','talking','strange','bizarre','weird','melt','distort','warp'],
     }
     scores = {e: sum(text.count(w) for w in ws) for e, ws in patterns.items()}
-    best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else 'wonder'
+    sorted_pairs = sorted(scores.items(), key=lambda x: -x[1])
+    best_score = sorted_pairs[0][1]
+    if best_score > 0:
+        tied = [e for e, s in sorted_pairs if s == best_score]
+        import random
+        return random.choice(tied)
+    import random
+    return random.choice(list(patterns.keys()))
 
 
 def _gen_image(narrative, keywords, emotion):
@@ -302,7 +311,7 @@ def handler(request):  # noqa: C901
         if emotion not in ALLOWED_EMOTIONS: emotion = 'wonder'
         item = {'id': 'b_' + uuid.uuid4().hex[:10], 'narrative': html_escape(narrative[:300]), 'emotion': emotion, 'date': datetime.now(timezone.utc).isoformat(), 'reactions': {}}
         _broadcasts.insert(0, item)
-        if len(_broadcasts) > 200: _broadcasts = _broadcasts[:200]
+        if len(_broadcasts) > 200: _broadcasts[:] = _broadcasts[:200]
         _save()
         return _json({'success': True, 'broadcast_id': item['id']}, 201)
 

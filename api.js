@@ -26,13 +26,13 @@ const EMOTION_MOODS = {
 };
 
 const EMOTION_PATTERNS = {
-  fear: ['害怕','恐惧','逃跑','黑暗','追赶','坠落','死亡','血','monster','dark','chase','falling','death'],
-  joy: ['开心','笑','美','幸福','温暖','爱','光明','彩虹','happy','love','light','warm','beautiful'],
-  calm: ['安静','水','湖','海','风','云','月','星星','花','calm','water','lake','ocean','wind','moon','star'],
-  anxiety: ['考试','迟到','找','迷路','丢','忘','急','错','exam','late','lost','forgot','anxious'],
-  wonder: ['飞','魔法','变','穿越','巨大','奇怪','宇宙','光','fly','magic','transform','cosmic','giant'],
-  sad: ['哭','难过','失去','离别','死','老','病','泪','cry','sad','loss','goodbye'],
-  strange: ['扭曲','颠倒','动物','说话','变成','平行','无限','surreal','twisted','animal','talking'],
+  fear: ['害怕','恐惧','逃跑','黑暗','追赶','坠落','死亡','血','鬼','怪物','噩梦','吓','恐怖','尖叫','逃','躲','深渊','窒息','棺材','僵尸','蛇','蜘蛛','陷阱','淹没','afraid','fear','scared','terrified','monster','dark','chase','falling','death','nightmare','horror','ghost','scream','hide','trapped','drowning','shadow','evil','demon'],
+  joy: ['开心','笑','美','幸福','温暖','爱','光明','彩虹','拥抱','庆祝','鲜花','阳光','婚礼','团聚','成功','甜','礼物','胜利','happy','love','light','warm','beautiful','joy','smile','laugh','celebration','sun','flower','hug','peace','heaven'],
+  calm: ['安静','水','湖','海','风','云','月','星星','花','雪','山','林','草原','日落','黄昏','晨曦','宁静','安详','漂浮','河','溪','寺庙','冥想','躺','散步','calm','water','lake','ocean','wind','moon','star','quiet','peaceful','slow','float','forest','river','sunset','snow','gentle','breeze'],
+  anxiety: ['考试','迟到','找','迷路','丢','忘','急','错','没准备','赶不上','错过','晚点','等待','紧张','担心','焦虑','裸体','反复','拥挤','电梯','断','碎','慌','exam','late','lost','forgot','anxious','naked','stuck','missed','rush','broken','nervous','worried','failure','test'],
+  wonder: ['飞','魔法','变','穿越','巨大','奇怪','宇宙','光','翅膀','神奇','幻想','星辰','银河','龙','精灵','仙境','奇迹','翱翔','异世界','宫殿','不可思议','fly','magic','cosmic','giant','wonder','fantasy','dragon','fairy','castle','portal','galaxy','wings','enchanted','mystical','ethereal','divine'],
+  sad: ['哭','难过','失去','离别','死','老','病','泪','悲伤','孤独','寂寞','哀伤','痛苦','心碎','分手','遗憾','怀念','无奈','叹息','葬礼','再也','cry','sad','loss','goodbye','sorrow','lonely','grief','pain','tears','heartbreak','funeral','regret','miss','empty','cold','rain'],
+  strange: ['扭曲','颠倒','动物','说话','变成','平行','无限','超现实','荒诞','错位','融化','变形','分身','循环','混乱','碎片','梦中梦','不真实','诡异','多重','surreal','twisted','animal','talking','strange','bizarre','weird','absurd','melt','shift','distort','warp','loop','fragment','double','clone','impossible'],
 };
 
 function _detectEmotion(text) {
@@ -40,8 +40,16 @@ function _detectEmotion(text) {
   for (const [e, words] of Object.entries(EMOTION_PATTERNS)) {
     scores[e] = words.reduce((s, w) => s + (text.includes(w) ? 1 : 0), 0);
   }
-  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  return best?.[1] > 0 ? best[0] : 'wonder';
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const bestScore = sorted[0][1];
+  if (bestScore > 0) {
+    // Among tied top scores, pick randomly
+    const tied = sorted.filter(p => p[1] === bestScore).map(p => p[0]);
+    return tied[Math.floor(Math.random() * tied.length)];
+  }
+  // No keywords matched → random emotion instead of always 'wonder'
+  const all = Object.keys(EMOTION_PATTERNS);
+  return all[Math.floor(Math.random() * all.length)];
 }
 
 function _extractKeywords(text) {
