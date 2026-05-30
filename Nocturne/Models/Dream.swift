@@ -1,6 +1,6 @@
 import Foundation
 
-struct Dream: Identifiable, Codable, Equatable {
+struct Dream: Identifiable, Codable, Equatable, Hashable {
     var id: String = UUID().uuidString
     var rawText: String = ""
     var narrative: String?

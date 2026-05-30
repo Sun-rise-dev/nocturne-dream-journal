@@ -33,7 +33,7 @@ struct TimelineView: View {
                             HStack {
                                 StatCell(value: "\(store.totalDreams)", label: lang.t("stat_dreams"))
                                 StatCell(value: "\(store.topKeywords.count)", label: lang.t("stat_symbols"))
-                                StatCell(value: store.emotionStats.first.map { Dream.emotions.first(where: { $0.key == $0.key })?.symbol ?? "·" } ?? "·", label: lang.t("stat_mood"))
+                                StatCell(value: store.emotionStats.first.flatMap { top in Dream.emotions.first(where: { $0.key == top.key })?.symbol } ?? "·", label: lang.t("stat_mood"))
                             }
                             .padding(.vertical, 12)
                         }

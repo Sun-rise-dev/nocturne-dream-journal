@@ -115,11 +115,11 @@ struct DreamDetailView: View {
         undoBackup = dream
         withAnimation {
             store.deleteDream(dream)
-            dismiss()
         }
         showUndo = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
             showUndo = false
+            dismiss()
         }
     }
 }

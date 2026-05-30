@@ -10,7 +10,8 @@ final class DreamRecorder: NSObject, SFSpeechRecognizerDelegate {
     var elapsed: TimeInterval = 0
     var statusText = ""
 
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+    private let supportedLocales: [String: String] = ["zh": "zh-CN", "en": "en-US"]
+    private var recognizer: SFSpeechRecognizer? = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
@@ -23,8 +24,16 @@ final class DreamRecorder: NSObject, SFSpeechRecognizerDelegate {
         SFSpeechRecognizer.requestAuthorization { _ in }
     }
 
+    // MARK: - SFSpeechRecognizerDelegate
+
+    func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
+        isAvailable = available
+    }
+
     func updateLocale(_ lang: String) {
-        // Locale is set at init; for simplicity, we re-create on language switch
+        let localeID = supportedLocales[lang] ?? "zh-CN"
+        recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeID))
+        recognizer?.delegate = self
     }
 
     func toggle() {
@@ -72,7 +81,8 @@ final class DreamRecorder: NSObject, SFSpeechRecognizerDelegate {
             guard let self = self, self.isRecording else { return }
             self.elapsed += 1
             if Date().timeIntervalSince(self.lastSpeech) > 4 && !self.transcript.isEmpty {
-                self.statusText = "Still there?"
+                let lang = UserDefaults.standard.string(forKey: "nocturne-lang") ?? "zh"
+                self.statusText = lang == "zh" ? "还在吗？" : "Still there?"
             }
             if self.elapsed >= 90 { self.stop() }
         }

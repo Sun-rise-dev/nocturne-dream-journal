@@ -6,6 +6,8 @@ struct RecordView: View {
     @State private var recorder = DreamRecorder()
     @State private var isProcessing = false
     @State private var processingPhase = 0
+    @State private var dotScales: [CGFloat] = [1.0, 1.0, 1.0]
+    @State private var weaveTimer: Timer?
     private let phases = ["weave_1", "weave_2", "weave_3", "weave_4"]
 
     var body: some View {
@@ -112,8 +114,7 @@ struct RecordView: View {
                         Circle()
                             .fill(Color(red: 0.78, green: 0.75, blue: 0.66).opacity(0.5))
                             .frame(width: 4, height: 4)
-                            .scaleEffect(1 + 0.5 * sin(Double(i) * 0.5 + Date().timeIntervalSince1970 * 3))
-                            .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: isProcessing)
+                            .scaleEffect(dotScales[i])
                     }
                 }
                 .padding(.top, 24)
@@ -125,12 +126,28 @@ struct RecordView: View {
         }
         .navigationTitle(lang.t("tab_record"))
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: isProcessing) { _, newValue in
+            if newValue {
+                for i in 0..<3 {
+                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true).delay(Double(i) * 0.3)) {
+                        dotScales[i] = 1.8
+                    }
+                }
+            } else {
+                for i in 0..<3 { dotScales[i] = 1.0 }
+            }
+        }
+        .onDisappear {
+            weaveTimer?.invalidate()
+            isProcessing = false
+        }
     }
 
     private func startProcessing() {
         isProcessing = true
         processingPhase = 0
-        Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { timer in
+        weaveTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
             processingPhase = (processingPhase + 1) % phases.count
             if !isProcessing { timer.invalidate() }
         }
